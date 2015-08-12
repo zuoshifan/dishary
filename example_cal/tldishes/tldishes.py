@@ -60,7 +60,8 @@ prms = {
     'beam': ap.fit.Beam2DGaussian,
     'bm_xwidth': np.radians(4.0),
     'bm_ywidth': np.radians(4.0),
-    'pointing': (0.0, latlong_conv(lat), 0.0), # pointing to the North Pole, az (clockwise around z = up, 0 at x axis = north), alt (from horizon), also see coord.py
+    # 'pointing': (0.0, latlong_conv(lat), 0.0), # pointing to the North Pole, az (clockwise around z = up, 0 at x axis = north), alt (from horizon), also see coord.py
+    'pointing': (0.0, np.pi/2, 0.0), # zenith
 }
 
 def get_aa(freqs):
@@ -74,6 +75,7 @@ def get_aa(freqs):
     # nants = len(prms['antpos'])
     assert(len(prms['delays']) == nants and len(prms['offsets']) == nants and len(prms['bp_r']) == nants and len(prms['bp_i']) == nants and len(prms['amps']) == nants)
     for pos, dly, off, bp_r, bp_i, amp in zip(prms['antpos'], prms['delays'], prms['offsets'], prms['bp_r'], prms['bp_i'], prms['amps']):
-        antennas.append(ap.fit.Antenna(pos[0],pos[1],pos[2], beam, phsoff=[dly, off], bp_r=bp_r, bp_i=bp_i, amp=amp, pointing=pointing))
-    aa = ap.fit.AntennaArray(prms['loc'], antennas)
+        # antennas.append(ap.pol.Antenna(pos[0],pos[1],pos[2], beam, phsoff=[dly, off], bp_r=bp_r, bp_i=bp_i, amp=amp, pointing=pointing))
+        antennas.append(ap.pol.Antenna(pos[0],pos[1],pos[2], beam, phsoff={'x':[dly, off], 'y':[dly, off]}, bp_r={'x':bp_r, 'y':bp_r}, bp_i={'x':bp_i, 'y':bp_i}, amp={'x':amp, 'y':amp}, pointing=pointing))
+    aa = ap.pol.AntennaArray(prms['loc'], antennas)
     return aa

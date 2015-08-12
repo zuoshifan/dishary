@@ -9,7 +9,7 @@ Modified from the same named script of Aaron Parsons by Shifan Zuo.
 import numpy as n, aipy as a, optparse, os, sys, shutil, ephem
 
 o = optparse.OptionParser()
-o.set_usage('mdlvis.py [options] *.uv')
+o.set_usage('%s [options] *.uv' % sys.argv[0].split('/')[-1].strip())
 o.set_description(__doc__)
 a.scripting.add_standard_options(o, ant=True, cal=True, src=True)
 o.add_option('-m','--mode', dest='mode', default='sim',
@@ -36,11 +36,11 @@ o.add_option('--startjd', dest='startjd', default=2454600., type='float',
     help='Julian Date to start observation if no input data to mimic.  Default is 2454600')
 o.add_option('--endjd', dest='endjd', default=2454601., type='float',
     help='Julian Date to end observation if no input data to mimic.  Default is 2454601')
-o.add_option('--pol', dest='pol',
+o.add_option('-p', '--pol', dest='pol',
     help='Polarizations to simulate (xx,yy,xy,yx) if starting file from scratch.')
 opts, args = o.parse_args(sys.argv[1:])
 
-assert(len(args) > 0), 'No uv file name. Usage: mdlvis.py [options] *.uv'
+assert(len(args) > 0), 'No uv file name. Usage: %s [options] *.uv' % sys.argv[0].split('/')[-1].strip()
 for filename in args:
     assert filename.endswith('.uv'), 'Incorrect input file name'
 if opts.mode == 'sim':
