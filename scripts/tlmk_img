@@ -80,7 +80,7 @@ outputs = opts.output.split(',')
 # Get all sources that will be used as phase centers.  If no sources are
 # specified, define phase centers for faceting a sphere.
 if opts.src == 'np': # the north pole
-    srcs = [a.phs.RadioFixedBody(aa.sidereal_time(), n.pi/2.0, name='zen')]
+    srcs = [a.phs.RadioFixedBody(aa.sidereal_time(), n.pi/2.0, name='north pole')]
     cat = a.phs.SrcCatalog(srcs)
 elif opts.src == 'zen': # the zenith
     srcs = [a.phs.RadioFixedBody(aa.sidereal_time(), aa.lat, name='zen')]
@@ -165,8 +165,8 @@ def img_it(im):
     #print 'Imaging with %d integrations' % n_ints
     n_ints = 0
     # Form dirty images/beams
-    uvs = a.img.recenter(n.abs(im.uv).astype(n.float), (DIM/2,DIM/2))
-    bms = a.img.recenter(n.abs(im.bm[0]).astype(n.float), (DIM/2,DIM/2))
+    uvs = a.img.recenter(n.abs(im.uv).astype(n.float64), (DIM/2,DIM/2))
+    bms = a.img.recenter(n.abs(im.bm[0]).astype(n.float64), (DIM/2,DIM/2))
     dim = im.image((DIM/2, DIM/2))
     dbm = im.bm_image(term=0, center=(DIM/2,DIM/2))
     return uvs,bms, dim,dbm
@@ -213,7 +213,7 @@ for srccnt, s in enumerate(cat.values()):
                       else:
                           im = a.img.ImgW(opts.size, opts.res, mf_order=0, wres=opts.wres)
                       if opts.src == 'np': # the north pole
-                          s = a.phs.RadioFixedBody(aa.sidereal_time(), n.pi/2.0, name='zen')
+                          s = a.phs.RadioFixedBody(aa.sidereal_time(), n.pi/2.0, name='north pole')
                           src = a.fit.SrcCatalog([s])
                       elif opts.src == 'zen': # the zenith
                           s = a.phs.RadioFixedBody(aa.sidereal_time(), 
@@ -241,7 +241,7 @@ for srccnt, s in enumerate(cat.values()):
               # Optimal SNR: down-weight beam-attenuated data 
               # by another factor of the beam response.
               d *= wgt; wgt *= wgt
-          else: wgt = n.ones(d.shape, dtype=n.float)
+          else: wgt = n.ones(d.shape, dtype=n.float64)
           valid = n.logical_and(n.logical_not(f), longenough)
           d = d.compress(valid)
           if len(d) == 0: continue
