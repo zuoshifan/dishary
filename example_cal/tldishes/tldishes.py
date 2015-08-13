@@ -60,8 +60,8 @@ prms = {
     'beam': ap.fit.Beam2DGaussian,
     'bm_xwidth': np.radians(4.0),
     'bm_ywidth': np.radians(4.0),
-    # 'pointing': (0.0, latlong_conv(lat), 0.0), # pointing to the North Pole, az (clockwise around z = up, 0 at x axis = north), alt (from horizon), also see coord.py
-    'pointing': (0.0, np.pi/2, 0.0), # zenith
+    'pointing': (0.0, latlong_conv(lat), 0.0), # pointing to the North Pole, az (clockwise around z = up, 0 at x axis = north), alt (from horizon), also see coord.py
+    # 'pointing': (0.0, np.pi/2, 0.0), # zenith
 }
 
 def get_aa(freqs):
