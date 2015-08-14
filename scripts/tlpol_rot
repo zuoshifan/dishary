@@ -10,12 +10,14 @@ import aipy as a
 from dishary.src import pol
 
 o = optparse.OptionParser()
-o.set_usage('%s *.uv' % sys.argv[0].split('/')[-1].strip())
+o.set_usage('%s [options] *.uv' % sys.argv[0].split('/')[-1].strip())
 o.set_description(__doc__)
+o.add_option('-v', '--verbose', dest='verbose', action='store_true',
+    help='Print execution info.')
 opts,args = o.parse_args(sys.argv[1:])
 
 
-assert(len(args) > 0), 'No uv file name. Usage: %s *.uv' % sys.argv[0].split('/')[-1].strip()
+assert(len(args) > 0), 'No uv file name. Usage: %s [options] *.uv' % sys.argv[0].split('/')[-1].strip()
 for filename in args:
     assert filename.endswith('.uv'), 'Incorrect input file name'
 
@@ -45,24 +47,30 @@ for uvfile in args:
     
     def mfunc(uv,p,d,f):
         uvw,t,bl = p
-        print uvi['pol']
+        if opts.verbose:
+            print uvi['pol']
         plzn = uvi.read_pol()
-        print bl,plzn 
+        if opts.verbose:
+            print bl,plzn 
         if plzn == 'xx':
             uvo.write_pol('I')
-            print '-->',uvo.read_pol()
+            if opts.verbose:
+                print '-->',uvo.read_pol()
             return p,DD[bl][t]['I'],f
         if plzn == 'xy': 
             uvo.write_pol('Q')
-            print '-->',uvo.read_pol()
+            if opts.verbose:
+                print '-->',uvo.read_pol()
             return p,DD[bl][t]['Q'],f
         if plzn == 'yx': 
             uvo.write_pol('U')
-            print '-->',uvo.read_pol()
+            if opts.verbose:
+                print '-->',uvo.read_pol()
             return p,DD[bl][t]['U'],f
         if plzn == 'yy': 
             uvo.write_pol('V')
-            print '-->',uvo.read_pol()
+            if opts.verbose:
+                print '-->',uvo.read_pol()
             return p,DD[bl][t]['V'],f
     
     uvi = a.pol.UV(infile)
