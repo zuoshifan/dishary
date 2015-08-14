@@ -67,5 +67,5 @@ for uvfile in args:
     
     uvi = a.pol.UV(infile)
     uvo = a.pol.UV(outfile,status='new')
-    uvo.init_from_uv(uvi)
+    uvo.init_from_uv(uvi, exclude=['pol']) # NOTE exclude=['pol'] here
     uvo.pipe(uvi,raw=True,mfunc=mfunc,append2hist='XY --> STOKES \n')
