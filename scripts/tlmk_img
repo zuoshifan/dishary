@@ -18,6 +18,8 @@ o.set_description(__doc__)
 a.scripting.add_standard_options(o, ant=True, chan=True, cal=True, dec=True)
 o.add_option('-s', '--src', dest='src', default='z',
     help='Phase centers/source catalog entries to use.  Options are "all", "z" (the zenith), "np" (the north pole), "<src_name1>,...", or "<ra XX[:XX:xx]>_<dec XX[:XX:xx]>". Default is "z".')
+o.add_option('--cat', dest='cat', default='helm,misc',
+    help='A comma-delimited list of catalogs from which sources are to be drawn.  Default is "helm,misc".  Other available catalogs are listed under aipy._src.  Some catalogs may require a separate data file to be downloaded and installed.')
 o.add_option('-p', '--pol', dest='pol', default='I',
     help='Choose polarization (I, Q, U, V, xx, yy, xy, yx) to include. Default is "I".')
 o.add_option('-o', '--output', dest='output', default='dim,dbm',
