@@ -139,14 +139,19 @@ n_ints = 0
 #bm_im = n.where(mask, 0, d)
 #print 'done'
 
-# Define a quick function writing an image to a FITS file
+def natpattern(num):
+    """Pattern that prints out a number upto `n` (natural number - no sign)."""
+    return ("%0" + repr(int(n.ceil(n.log10(num + 1)))) + "d")
+
 def fname(ftag, cnt, chan=None):
+    """Generate a proper file name for the FITS image."""
     if chan is None:
         return '%s.%s.all.fits' % (opts.fmt % cnt, ftag)
     else:
-        return '%s.%s.%d.fits' % (opts.fmt % cnt, ftag, chan)
-        
+        return ('%s.%s.%s.fits' % (opts.fmt % cnt, ftag, natpattern(max(chans)))) % chan[1]
+
 def to_fits(ftag, i, src, cnt, chan=None, history=''):
+    """A quick function writes an image to a FITS file."""
     filename = fname(ftag, cnt, chan)
     print 'Saving data to', filename
     while len(i.shape) < 4: i.shape = i.shape + (1,)
@@ -163,7 +168,7 @@ def to_fits(ftag, i, src, cnt, chan=None, history=''):
     if chan is None:
         freq = cfreq
     else:
-        freq = afreqs[chan]
+        freq = afreqs[chan[0]]
     a.img.to_fits(filename, i, clobber=True,
         object=src.src_name, obs_date=str(aa.date),
         ra=cen.ra*a.img.rad2deg, dec=cen.dec*a.img.rad2deg, epoch=2000.,
@@ -228,7 +233,7 @@ for srccnt, s in enumerate(cat.values()):
                                         uvs = n.abs(im.uv)
                                         bms,dim,dbm = uvs,uvs,uvs
                                     for k in ['uvs','bms','dim','dbm']:
-                                        if k in outputs: to_fits(k, eval(k), s, imgcnt, i, history=history)
+                                        if k in outputs: to_fits(k, eval(k), s, imgcnt, [i, chans[i]], history=history)
                                     us[i],vs[i],ws[i],ds[i],wgts[i] = [],[],[],[],[]
                             else:
                                 try:
@@ -271,6 +276,7 @@ for srccnt, s in enumerate(cat.values()):
             if not opts.skip_bm:
                 # Calculate beam strength for weighting purposes
                 wgt = aa.bm_response(i,j).squeeze()
+                wgt = wgt.take(chans)
                 # Optimal SNR: down-weight beam-attenuated data 
                 # by another factor of the beam response.
                 d *= wgt; wgt *= wgt
@@ -313,7 +319,7 @@ for srccnt, s in enumerate(cat.values()):
                 print 'No data: skipping output file.'
                 continue
             for k in ['uvs','bms','dim','dbm']:
-                if k in outputs: to_fits(k, eval(k), s, imgcnt, i, history=history)
+                if k in outputs: to_fits(k, eval(k), s, imgcnt, [i, chans[i]], history=history)
             us[i],vs[i],ws[i],ds[i],wgts[i] = [],[],[],[],[]
     else:
         try:
