@@ -6,7 +6,7 @@ setup(
     version = 0.1,
 
     packages = find_packages(),
-    scripts=['scripts/tlmdl_vis', 'scripts/tlpol_rot', 'scripts/tlmk_img'],
+    scripts=['scripts/tlmdl_vis', 'scripts/tlpol_rot', 'scripts/tlmk_img', 'scripts/tlcl_img'],
     requires = ['numpy', 'aipy'],  # Probably should change this.
 
     # metadata for upload to PyPI
