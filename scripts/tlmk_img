@@ -146,9 +146,9 @@ def natpattern(num):
 def fname(ftag, cnt, chan=None):
     """Generate a proper file name for the FITS image."""
     if chan is None:
-        return '%s.%s.all.fits' % (opts.fmt % cnt, ftag)
+        return '%s.all.%s.fits' % (opts.fmt % cnt, ftag)
     else:
-        return ('%s.%s.%s.fits' % (opts.fmt % cnt, ftag, natpattern(max(chans)))) % chan[1]
+        return ('%s.%s.%s.fits' % (opts.fmt % cnt, natpattern(max(chans)), ftag)) % chan[1]
 
 def to_fits(ftag, i, src, cnt, chan=None, history=''):
     """A quick function writes an image to a FITS file."""
