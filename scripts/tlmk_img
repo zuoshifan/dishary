@@ -215,6 +215,7 @@ for srccnt, s in enumerate(cat.values()):
         uv.select('decimate', opts.decimate, opts.decphs)
         # Read all data from each file
         for (crd,t,(i,j)),d,f in uv.all(raw=True):
+            d = d.astype(n.complex128) # convert to higher numerical precision to avoid overflow
             pol = a.miriad.pol2str[uv['pol']]
             history = uv['history']
             history = history +  sys.argv[0].split('/')[-1].strip()+' ' + ' '.join(sys.argv[1:])
