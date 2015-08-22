@@ -277,7 +277,7 @@ for srccnt, s in enumerate(cat.values()):
             if not opts.skip_bm:
                 # Calculate beam strength for weighting purposes
                 wgt = aa.bm_response(i,j).squeeze()
-                wgt = wgt.take(chans)
+                # wgt = wgt.take(chans)
                 # Optimal SNR: down-weight beam-attenuated data 
                 # by another factor of the beam response.
                 d *= wgt; wgt *= wgt
