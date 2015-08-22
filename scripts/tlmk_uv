@@ -1,0 +1,109 @@
+#! /usr/bin/env python
+"""
+This script create a MIRIAD uv data file from the input observation data.
+"""
+
+import os
+import sys
+import optparse
+import aipy as a
+import numpy as np
+
+o = optparse.OptionParser()
+o.set_usage('%s [options] *.npy' % sys.argv[0].split('/')[-1].strip())
+o.set_description(__doc__)
+a.scripting.add_standard_options(o, cal=True)
+o.add_option('-o', '--output', dest='output', default='new.uv',
+    help='Output uv data file name.')
+o.add_option('-v', '--verbose', dest='verbose', action='store_true',
+    help='Print execution info.')
+opts, args = o.parse_args(sys.argv[1:])
+
+
+nargs = len(args)
+assert(nargs % 3 == 0)
+nfiles = nargs / 3
+freqs = np.load(args[2]) / 1.0e3 # GHZ
+aa = a.cal.get_aa(opts.cal, freqs)
+nants = 4
+
+if os.path.exists(opts.output):
+    print 'Output file exists... Skipping'
+else:
+    uv = a.miriad.UV(opts.output, status='new')
+    uv._wrhd('obstype','mixed-auto-cross')
+    uv._wrhd('history','TLMK_VIS: created file.\nTLMK_VIS: ' + ' '.join(sys.argv) + '\n')
+    uv.add_var('telescop','a'); uv['telescop'] = 'Tianlai dishes'
+    uv.add_var('antdiam'   ,'r'); uv['antdiam'] = 6.0 # antenna diameter
+    uv.add_var('project','a'); uv['project'] = 'Some project'
+    uv.add_var('observer','a'); uv['observer'] = 'Some one'
+    uv.add_var('operator','a'); uv['operator'] = 'Some one'
+    uv.add_var('version' ,'a'); uv['version'] = '0.0.1'
+    uv.add_var('epoch'   ,'r'); uv['epoch'] = 2000.0
+    uv.add_var('source'  ,'a'); uv['source'] = 'North Pole'
+    uv.add_var('latitud' ,'d'); uv['latitud'] = aa.lat
+    uv.add_var('dec'     ,'d'); uv['dec'] = np.pi / 2.0 # declination of the North pole
+    uv.add_var('obsdec'  ,'d'); uv['obsdec'] = np.pi / 2.0 # declination of the North pole
+    uv.add_var('longitu' ,'d'); uv['longitu'] = aa.long
+    uv.add_var('pntdec' ,'d'); uv['pntdec'] = aa.lat # declination of the pointing center
+    uv.add_var('pntra' ,'d'); uv['pntra'] = aa.long # declination of the pointing center
+    uv.add_var('npol'    ,'i'); uv['npol'] = 4
+    uv.add_var('nspect'  ,'i'); uv['nspect'] = 1
+    uv.add_var('nants'   ,'i'); uv['nants'] = nants
+    uv.add_var('antpos'  ,'d')
+    antpos = np.array([ant.pos for ant in aa], dtype=np.double)
+    uv['antpos'] = antpos.transpose().flatten()
+    uv.add_var('sfreq'   ,'d'); uv['sfreq'] = freqs[0]
+    uv.add_var('freq'    ,'d'); uv['freq'] = freqs[0]
+    uv.add_var('restfreq','d'); uv['restfreq'] = freqs[0]
+    uv.add_var('sdf'     ,'d'); uv['sdf'] = freqs[1] - freqs[0]
+    uv.add_var('nchan'   ,'i'); uv['nchan'] = freqs.size
+    uv.add_var('nschan'  ,'i'); uv['nschan'] = freqs.size
+    uv.add_var('inttime' ,'r'); uv['inttime'] = 1.0
+    # These variables just set to dummy values
+    uv.add_var('vsource' ,'r'); uv['vsource'] = 0.
+    uv.add_var('ischan'  ,'i'); uv['ischan'] = 1
+    uv.add_var('tscale'  ,'r'); uv['tscale'] = 0.
+    uv.add_var('veldop'  ,'r'); uv['veldop'] = 0.
+    uv.add_var('pressmb'  ,'r'); uv['pressmb'] = 0. # atmospheric pressure, millibar
+    uv.add_var('systemp'  ,'r'); uv['systemp'] = 0. # Antenna system temperatures, Kelvin
+    # These variables will get updated every spectrum
+    uv.add_var('coord'   ,'d')
+    uv.add_var('time'    ,'d')
+    uv.add_var('lst'     ,'d')
+    uv.add_var('ra'      ,'d')
+    uv.add_var('obsra'   ,'d')
+    uv.add_var('baseline','r')
+    uv.add_var('pol'     ,'i')
+
+
+
+    # ants = [1, 7, 10, 15]
+    ants = [0, 6, 9, 14] # antenna number start from 0
+    bls = [(ants[i], ants[j]) for i in range(len(ants)) for j in range(i, len(ants))]
+    for ni in range(nfiles):
+        if opts.verbose:
+            print 'file: %d of %d' % (ni, nfiles)
+        data = np.load(args[3*ni])
+        time = np.load(args[3*ni+1])
+        # freq = np.load(args[3*ni+2])
+        # print data.dtype
+        for ti in range(time.size):
+            if opts.verbose:
+                print 'time: %d of %d' % (ti, time.size)
+            t = time[ti]
+            aa.set_jultime(t)
+            uv['lst'] = aa.sidereal_time()
+            uv['ra'] = aa.sidereal_time()
+            uv['obsra'] = aa.sidereal_time()
+            for bi, (i, j) in enumerate(bls):
+                crd = aa.get_baseline(i, j)
+                preamble = (crd, t, (i,j))
+                for pi, pol in enumerate(['xx', 'yy', 'xy', 'yx']):
+                    uv['pol'] = a.miriad.str2pol[pol]
+                    d = data[ti, bi, pi]
+                    flags = np.zeros(d.size, dtype=np.bool)
+                    uv.write(preamble, d, flags)
+
+
+    del uv
