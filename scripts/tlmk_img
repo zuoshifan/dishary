@@ -85,7 +85,7 @@ outputs = opts.output.split(',')
 # Get all sources that will be used as phase centers.  If no sources are
 # specified, define phase centers for faceting a sphere.
 if opts.src == 'np': # the north pole
-    srcs = [a.phs.RadioFixedBody(aa.sidereal_time(), n.pi/2.0, name='north pole')]
+    srcs = [a.phs.RadioFixedBody(aa.sidereal_time(), n.pi/2.0, name='north pole', epoch=str(aa.epoch))]
     cat = a.phs.SrcCatalog(srcs)
 elif opts.src == 'zen': # the zenith
     srcs = [a.phs.RadioFixedBody(aa.sidereal_time(), aa.lat, name='zen')]
