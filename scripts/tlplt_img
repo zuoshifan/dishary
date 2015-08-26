@@ -14,7 +14,7 @@ o = optparse.OptionParser()
 o.set_usage('%s [options] *.fits' % sys.argv[0].split('/')[-1].strip())
 o.set_description(__doc__)
 a.scripting.add_standard_options(o, chan=True, cmap=True, max=True, drng=True)
-o.add_option('-m', '--mode', dest='mode', default='log',
+o.add_option('-m', '--mode', dest='mode', default='lin',
     help='Plot mode can be log (logrithmic), lin (linear), phs (phase), real, or imag.')
 o.add_option('-o', '--outfile', dest='outfile', default='',
     help='If provided, will save the figure to the specified file instead of popping up a window.')
@@ -38,7 +38,7 @@ for cnt, filename in enumerate(args):
     print filename
     if opts.batch:
         cnt = 0
-        outfile = filename+'.png'
+        outfile = filename.replace('.fits', '.png')
         if os.path.exists(outfile):
             print 'Output file exists... skipping.'
             continue
@@ -75,7 +75,8 @@ for cnt, filename in enumerate(args):
         d = n.fft.fft2(d)
         d = a.img.recenter(d, (d.shape[0]/2, d.shape[1]/2))
     if opts.mode.startswith('phs'): d = n.angle(d)
-    elif opts.mode.startswith('lin'): d = n.absolute(d)
+    # elif opts.mode.startswith('lin'): d = n.absolute(d)
+    elif opts.mode.startswith('lin'): d = d
     elif opts.mode.startswith('real'): d = d.real
     elif opts.mode.startswith('imag'): d = d.imag
     elif opts.mode.startswith('log'):
@@ -88,6 +89,7 @@ for cnt, filename in enumerate(args):
     if not opts.drng is None: min = max - opts.drng
     else: min = d.min()
 
+    p.figure(figsize=(8, 6))
     p.subplot(m2, m1, cnt+1)
     if not opts.nogrid:
         from mpl_toolkits.basemap import Basemap
@@ -98,13 +100,17 @@ for cnt, filename in enumerate(args):
         dy2 = (ypx/2 - .5) * kwds['d_dec'] * a.img.deg2rad
         map = Basemap(projection='ortho', lon_0=180, lat_0=kwds['dec'],
             rsphere=1, llcrnrx=dx1, llcrnry=dy1, urcrnrx=dx2,urcrnry=dy2)
-        map.drawmeridians(n.arange(kwds['ra']-180,kwds['ra']+180,30))
-        map.drawparallels(n.arange(-90,120,30))
+        # map.drawmeridians(n.arange(kwds['ra']-180,kwds['ra']+180,30))
+        # map.drawparallels(n.arange(-90,120,30))
+        # map.drawmeridians(n.arange(kwds['ra']-180,kwds['ra']+180,30), latmax=90.0, labels=[1, 1, 1, 1])
+        # map.drawmeridians(n.arange(-180,180,30), latmax=90.0, labels=[1, 1, 1, 1])
+        map.drawmeridians(n.arange(0,360,30), latmax=90.0, labels=[1, 1, 1, 1])
+        map.drawparallels(n.arange(-90,90,2))
         map.drawmapboundary()
         map.imshow(d, vmin=min, vmax=max, cmap=cmap, interpolation='nearest')
     else: p.imshow(d, vmin=min, vmax=max, origin='lower', cmap=cmap, interpolation='nearest')
     p.colorbar(shrink=.5, fraction=.05)
-    p.title(filename)
+    # p.title(filename)
 
     if opts.batch:
         print 'Saving to', outfile
