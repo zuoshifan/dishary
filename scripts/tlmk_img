@@ -112,17 +112,25 @@ if opts.list_facets:
 # Generate the image object that will be used.
 us,vs,ws,ds,wgts = [],[],[],[],[]
 if opts.separate:
+    im = []
     for i in range(nchan):
         us.append([])
         vs.append([])
         ws.append([])
         ds.append([])
         wgts.append([])
-if opts.no_w:
-    im = a.img.Img(opts.size, opts.res, mf_order=0)
+        if opts.no_w:
+            im.append(a.img.Img(opts.size, opts.res, mf_order=0))
+        else:
+            im.append(a.img.ImgW(opts.size, opts.res, mf_order=0, wres=opts.wres))
+    L,M = im[0].get_LM()
 else:
-    im = a.img.ImgW(opts.size, opts.res, mf_order=0, wres=opts.wres)
-L,M = im.get_LM()
+    if opts.no_w:
+        im = a.img.Img(opts.size, opts.res, mf_order=0)
+    else:
+        im = a.img.ImgW(opts.size, opts.res, mf_order=0, wres=opts.wres)
+    L,M = im.get_LM()
+    
 DIM = int(opts.size/opts.res)
 n_ints = 0
 
@@ -228,10 +236,10 @@ for srccnt, s in enumerate(cat.values()):
                             if opts.separate:
                                 for i in range(nchan):
                                     try:
-                                        grid_it(im,us[i],vs[i],ws[i],ds[i],wgts[i])
-                                        uvs,bms,dim,dbm = img_it(im)
+                                        grid_it(im[i],us[i],vs[i],ws[i],ds[i],wgts[i])
+                                        uvs,bms,dim,dbm = img_it(im[i])
                                     except(ValueError):
-                                        uvs = n.abs(im.uv)
+                                        uvs = n.abs(im[i].uv)
                                         bms,dim,dbm = uvs,uvs,uvs
                                     for k in ['uvs','bms','dim','dbm']:
                                         if k in outputs: to_fits(k, eval(k), s, imgcnt, [i, chans[i]], history=history)
@@ -247,10 +255,18 @@ for srccnt, s in enumerate(cat.values()):
                                     if k in outputs: to_fits(k, eval(k), s, imgcnt, None, history=history)
                                 us,vs,ws,ds,wgts = [],[],[],[],[]
                             imgcnt += 1
-                        if opts.no_w:
-                            im = a.img.Img(opts.size, opts.res, mf_order=0)
+
+                        if opts.separate:
+                            for i in range(nchan):
+                                if opts.no_w:
+                                    im[i] = a.img.Img(opts.size, opts.res, mf_order=0)
+                                else:
+                                    im[i] = a.img.ImgW(opts.size, opts.res, mf_order=0, wres=opts.wres)
                         else:
-                            im = a.img.ImgW(opts.size, opts.res, mf_order=0, wres=opts.wres)
+                            if opts.no_w:
+                                im = a.img.Img(opts.size, opts.res, mf_order=0)
+                            else:
+                                im = a.img.ImgW(opts.size, opts.res, mf_order=0, wres=opts.wres)
                         if opts.src == 'np': # the north pole
                             s = a.phs.RadioFixedBody(aa.sidereal_time(), n.pi/2.0, name='north pole')
                             src = a.fit.SrcCatalog([s])
@@ -290,10 +306,10 @@ for srccnt, s in enumerate(cat.values()):
                         vs[i].append(n.array([v[0][i]]))
                         ws[i].append(n.array([w[0][i]]))
                         wgts[i].append(n.array([wgt[i]]))
-                for i in range(nchan):
+
                     # If data buffer is full, grid data
                     if len(ds[i]) > opts.buf_thresh:
-                        grid_it(im,us[i],vs[i],ws[i],ds[i],wgts[i])
+                        grid_it(im[i],us[i],vs[i],ws[i],ds[i],wgts[i])
                         us[i],vs[i],ws[i],ds[i],wgts[i] = [],[],[],[],[]
             else:
                 valid = n.logical_and(n.logical_not(f), longenough)
@@ -314,14 +330,20 @@ for srccnt, s in enumerate(cat.values()):
     if opts.separate:
         for i in range(nchan):
             try:
-                grid_it(im,us[i],vs[i],ws[i],ds[i],wgts[i])
-                uvs,bms,dim,dbm = img_it(im)
+                grid_it(im[i],us[i],vs[i],ws[i],ds[i],wgts[i])
+                uvs,bms,dim,dbm = img_it(im[i])
             except(ValueError):
                 print 'No data: skipping output file.'
                 continue
             for k in ['uvs','bms','dim','dbm']:
                 if k in outputs: to_fits(k, eval(k), s, imgcnt, [i, chans[i]], history=history)
             us[i],vs[i],ws[i],ds[i],wgts[i] = [],[],[],[],[]
+
+            # Reinitialize Image object before making new image
+            if opts.no_w:
+                im[i] = a.img.Img(opts.size, opts.res, mf_order=0)
+            else:
+                im[i] = a.img.ImgW(opts.size, opts.res, mf_order=0, wres=opts.wres)
     else:
         try:
             grid_it(im,us,vs,ws,ds,wgts)
@@ -332,8 +354,12 @@ for srccnt, s in enumerate(cat.values()):
         for k in ['uvs','bms','dim','dbm']:
             if k in outputs: to_fits(k, eval(k), s, imgcnt, None, history=history)
         us,vs,ws,ds,wgts = [],[],[],[],[]
+
+        # Reinitialize Image object before making new image
+        if opts.no_w:
+            im = a.img.Img(opts.size, opts.res, mf_order=0)
+        else:
+            im = a.img.ImgW(opts.size, opts.res, mf_order=0, wres=opts.wres)
+
+
     imgcnt += 1
-    if opts.no_w:
-        im = a.img.Img(opts.size, opts.res, mf_order=0)
-    else:
-        im = a.img.ImgW(opts.size, opts.res, mf_order=0, wres=opts.wres)
