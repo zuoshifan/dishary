@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 """
-Thsi script solves for the complex gain for each baseline by a simple point source calibration method.
+This script solves for the complex gain for each baseline by a simple point source calibration method.
 
 """
 
@@ -20,7 +20,7 @@ try:
 except ImportError:
    import pickle
 
-import os
+# import os
 import sys
 import optparse
 import aipy as a
