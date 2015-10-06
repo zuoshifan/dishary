@@ -1,0 +1,119 @@
+#! /usr/bin/env python
+"""
+This script calibrate antennas' positions using the phase of the observed visibilities of a near-field signal source by Non-linear Least Squares fit.
+
+"""
+# import os
+import sys
+import optparse
+import aipy as a
+import numpy as np
+# import h5py
+
+
+o = optparse.OptionParser()
+o.set_usage('%s [options] *.uv' % sys.argv[0].split('/')[-1].strip())
+o.set_description(__doc__)
+a.scripting.add_standard_options(o, ant=True, pol=True, chan=True, cal=True, dec=True)
+o.add_option('-t', '--time', dest='time', default='all',
+    help='Select which time sample to plot. Options are: "all" (default), "<time1 #>_<time2 #>" (a range of times to plot), or "<time1 #>,<time2 #>" (a list of times to plot).')
+o.add_option('--time_axis', dest='time_axis', default='physical',
+    help='Choose time axis to be integration/fringe index (index), or physical coordinates (physical).  Default is physical.')
+o.add_option('-N','--Niter', dest='Niter', type='int', default='10',
+    help='Maximum number of iterations.')
+o.add_option('-o', '--output_file', dest='output_file', default='gain.hdf5',
+    help='Output file name. Default is gain.hdf5.')
+o.add_option('-v', '--verbose', dest='verbose', action='store_true',
+    help='Print some info.')
+opts, args = o.parse_args(sys.argv[1:])
+
+
+def distance(pos1, pos2=np.zeros(3)):
+    """Distance between two positions `pos1` and `pos2`."""
+    r = pos1 - pos2
+    return np.sqrt(r[0]**2 + r[1]**2 + r[2]**2)
+
+
+freq = 750.0 # MHz
+k0 = 2 * np.pi * (1.0e6 * freq) / (0.01 * a.const.c)
+
+ndish = 16
+# baselines
+bls = [(i, j) for i in range(ndish) for j in range(i+1, ndish)]
+nbl = len(bls)
+
+# phase of the measured visibilities
+Phi = np.zeros((2, nbl))
+
+# initial values
+# beta_k[5*i:5*i+5] is for [xi, yi, zi, phixi, phiyi] of antenna i, beta_k[-3:] is for [x, y, z] of the near-field source
+beta_k = np.zeros(5*ndish + 3, dtype=np.float64)
+
+r2 = []
+cnt = 0
+Jmat = np.zeros((2*nbl+2, len(beta_k)))
+while True:
+    # phi in the range (0, 2*pi)
+    for i in range(ndish):
+        beta_k[5*i+3:5*i+5] = np.mod(beta_k[5*i+3:5*i+5], 2 * np.pi)
+
+    Phi_k = np.zeros_like(Phi)
+    for p in range(2):
+        for ind, (i, j) in enumerate(bls):
+            # position of the near-field source
+            nf = beta_k[-3:]
+            ai = beta_k[5*i:5*i+3]
+            aj = beta_k[5*j:5*j+3]
+            # xx and yy phase of antenna i, j
+            phii = beta_k[5*i+3:5*i+5]
+            phij = beta_k[5*j+3:5*j+5]
+            # distance between two points
+            # r = distance(nf)
+            ri = distance(nf, ai)
+            rj = distance(nf, aj)
+            # phase
+            Phi_k[p, ind] = k0 * (ri - rj) + phii[p] - phij[p]
+            # derivatives
+            dridnf = (nf - ai) / ri # (dri/dx, dri/dy, dri/dz)
+            drjdnf = (nf - aj) / rj # (drj/dx, drj/dy, drj/dz)
+            dridai = -dridnf # (dri/dxi, dri/dyi, dri/dzi)
+            drjdaj = -drjdnf # (drj/dxj, drj/dyj, drj/dzj)
+            # Jocobian
+            Jmat[p*nbl+ind, 5*i:5*i+3] = k0 * dridai
+            Jmat[p*nbl+ind, 5*i+3+p:5*i+4+p] = 1.0
+            Jmat[p*nbl+ind, 5*j:5*j+3] = -k0 * drjdaj
+            Jmat[p*nbl+ind, 5*j+3+p:5*j+4+p] = -1.0
+            Jmat[p*nbl+ind, -3:] = k0 * (dridnf - drjdnf)
+
+    for i in range(ndish):
+        Jmat[5*i+3:5*i+5] = 1.0
+    JmatT = Jmat.T
+    delta_Phi = Phi - Phi_k
+    r2.append(np.sum(delta_Phi**2))
+    b = np.zeros(len(delta_Phi.reshape(-1))+2, dtype=delta_Phi.dtype)
+    b[:-2] = delta_Phi.reshape(-1)
+    # constraints of phase: Sum phix = 0 and Sum phiy = 0
+    sum_phix0 = 0.0
+    sum_phiy0 = 0.0
+    for i in range(ndish):
+        sum_phix0 += beta_k[5*i+3]
+        sum_phiy0 += beta_k[5*i+4]
+    # Sum (phii0 + dphi0) = 0
+    b[-2] = -sum_phix0
+    b[-1] = -sum_phiy0
+
+    # solve for the equation (J^T J) delta_beta = J^T b
+    delta_beta = np.dot(np.linalg.inv(np.dot(JmatT, Jmat)), np.dot(JmatT, b))
+    if opts.verbose:
+        print 'cnt:', cnt
+        print delta_beta
+
+    beta_k += delta_beta
+
+    cnt += 1
+    if cnt >= opts.Niter or np.allclose(delta_beta, 0.0):
+        break
+
+print beta_k
+print np.max(b)
+print r2
