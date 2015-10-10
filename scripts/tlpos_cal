@@ -43,11 +43,14 @@ bls = [(i, j) for i in range(ndish) for j in range(i+1, ndish)]
 nbl = len(bls)
 
 # phase of the measured visibilities
-Phi = np.zeros((2, nbl))
+# Phi = np.zeros((2, nbl))
+Phi = np.load('Phi.npy')
 
 # initial values
 # beta_k[5*i:5*i+5] is for [xi, yi, zi, phixi, phiyi] of antenna i, beta_k[-3:] is for [x, y, z] of the near-field source
-beta_k = np.zeros(5*ndish + 3, dtype=np.float64)
+# beta_k = np.zeros(5*ndish + 3, dtype=np.float64)
+beta_k = np.load('beta0.npy')
+Phi_k = np.zeros_like(Phi)
 
 r2 = []
 cnt = 0
@@ -57,7 +60,6 @@ while True:
     for i in range(ndish):
         beta_k[5*i+3:5*i+5] = np.mod(beta_k[5*i+3:5*i+5], 2 * np.pi)
 
-    Phi_k = np.zeros_like(Phi)
     for p in range(2):
         for ind, (i, j) in enumerate(bls):
             # position of the near-field source
@@ -85,25 +87,30 @@ while True:
             Jmat[p*nbl+ind, 5*j+3+p:5*j+4+p] = -1.0
             Jmat[p*nbl+ind, -3:] = k0 * (dridnf - drjdnf)
 
+    # constraints of phase: Sum phix = 0 and Sum phiy = 0
     for i in range(ndish):
-        Jmat[5*i+3:5*i+5] = 1.0
+        Jmat[-2, 5*i+3] = 1.0
+        Jmat[-1, 5*i+4] = 1.0
     JmatT = Jmat.T
+    Phi_k = np.mod(Phi_k, 2 * np.pi)
     delta_Phi = Phi - Phi_k
     r2.append(np.sum(delta_Phi**2))
     b = np.zeros(len(delta_Phi.reshape(-1))+2, dtype=delta_Phi.dtype)
     b[:-2] = delta_Phi.reshape(-1)
-    # constraints of phase: Sum phix = 0 and Sum phiy = 0
+
     sum_phix0 = 0.0
     sum_phiy0 = 0.0
     for i in range(ndish):
         sum_phix0 += beta_k[5*i+3]
         sum_phiy0 += beta_k[5*i+4]
     # Sum (phii0 + dphi0) = 0
-    b[-2] = -sum_phix0
-    b[-1] = -sum_phiy0
+    b[-2] = -np.mod(sum_phix0, 2 * np.pi)
+    b[-1] = -np.mod(sum_phiy0, 2 * np.pi)
 
     # solve for the equation (J^T J) delta_beta = J^T b
     delta_beta = np.dot(np.linalg.inv(np.dot(JmatT, Jmat)), np.dot(JmatT, b))
+    print 'det(JT J):', np.linalg.det(np.dot(JmatT, Jmat))
+    print 'J b:', np.dot(Jmat, delta_beta)
     if opts.verbose:
         print 'cnt:', cnt
         print delta_beta
@@ -116,4 +123,5 @@ while True:
 
 print beta_k
 print np.max(b)
+# print np.max(delta_Phi)
 print r2
