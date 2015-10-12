@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 """
-This script calibrate antennas' positions using the phase of the observed visibilities of a near-field signal source by Non-linear Least Squares fit.
+This script calibrate antennas' positions using the phase of the observed visibilities of a (or more) near-field signal source(s) by Non-linear Least Squares fit.
 
 """
 # import os
@@ -20,10 +20,12 @@ o.add_option('-t', '--time', dest='time', default='all',
     help='Select which time sample to plot. Options are: "all" (default), "<time1 #>_<time2 #>" (a range of times to plot), or "<time1 #>,<time2 #>" (a list of times to plot).')
 o.add_option('--time_axis', dest='time_axis', default='physical',
     help='Choose time axis to be integration/fringe index (index), or physical coordinates (physical).  Default is physical.')
-o.add_option('-N','--Niter', dest='Niter', type='int', default='10',
-    help='Maximum number of iterations.')
-o.add_option('-o', '--output_file', dest='output_file', default='gain.hdf5',
-    help='Output file name. Default is gain.hdf5.')
+o.add_option('-N','--Niter', dest='Niter', type='int', default=10,
+    help='Maximum number of iterations. Default is 10')
+o.add_option('--precision', dest='precision', type='float', default=1.0e-12,
+    help='Numerical computation precision. Default is 1.0e-12.')
+# o.add_option('-o', '--output_file', dest='output_file', default='gain.hdf5',
+#     help='Output file name. Default is gain.hdf5.')
 o.add_option('-v', '--verbose', dest='verbose', action='store_true',
     help='Print some info.')
 opts, args = o.parse_args(sys.argv[1:])
@@ -38,12 +40,14 @@ def distance(pos1, pos2=np.zeros(3)):
 freq = 750.0 # MHz
 k0 = 2 * np.pi * (1.0e6 * freq) / (0.01 * a.const.c)
 
-constraints = True # whether add constraints on phase
+# constraints = True # whether add constraints on phase
 # constraints = False # whether add constraints on phase
 # num_nf = 2 # number of near-field sources
 num_nf = 1 # number of near-field sources
 
 ndish = 16
+# the reference dish
+center_dish = 15 # number start from 0
 # baselines
 bls = [(i, j) for i in range(ndish) for j in range(i+1, ndish)]
 nbl = len(bls)
@@ -60,13 +64,20 @@ Phi = np.load('Phi.npy')
 beta_k = np.load('beta0.npy')
 Phi_k = np.zeros_like(Phi)
 
+
+# if constraints:
+#     Jmat = np.zeros((npol*num_nf*nbl+npol, len(beta_k)))
+# else:
+#     Jmat = np.zeros((npol*num_nf*nbl, len(beta_k)))
+Jmat = np.zeros((npol*num_nf*nbl, len(beta_k)))
+delta_beta = np.zeros_like(beta_k)
+Jmat1 = np.zeros((npol*num_nf*nbl, len(beta_k)-nprm)) # Jmat for antennas other than the center_dish
+
 r2 = []
 cnt = 0
-if constraints:
-    Jmat = np.zeros((npol*num_nf*nbl+npol, len(beta_k)))
-else:
-    Jmat = np.zeros((npol*num_nf*nbl, len(beta_k)))
-while True:
+while cnt < opts.Niter:
+    if opts.verbose:
+        print 'Iteration: %d of %d' % (cnt, opts.Niter)
     # phi in the range (0, 2*pi)
     # for i in range(ndish):
     #     beta_k[nprm*i+3:nprm*i+3+npol] = np.mod(beta_k[nprm*i+3:nprm*i+3+npol], 2 * np.pi)
@@ -104,42 +115,53 @@ while True:
                 Jmat[(n*npol+p)*nbl+ind, slc] = k0 * (dridnf - drjdnf)
 
     # constraints of phase: Sum phix = 0 and Sum phiy = 0
-    if constraints:
-        for p in range(npol):
-            for i in range(ndish):
-                Jmat[-(p+1), nprm*i+3+p] = 1.0
-    print 'Jmat.shape: ', Jmat.shape
+    # if constraints:
+    #     for p in range(npol):
+    #         for i in range(ndish):
+    #             Jmat[-(p+1), nprm*i+3+p] = 1.0
+    # print 'Jmat.shape: ', Jmat.shape
     # print 'Jmat: ', Jmat
     # JmatT = Jmat.T
     Phi_k = np.mod(Phi_k, 2 * np.pi)
     delta_Phi = (Phi - Phi_k).reshape(-1)
-    r2.append(np.sum(delta_Phi**2))
-    b = np.zeros(Jmat.shape[0], dtype=delta_Phi.dtype)
-    b[:len(delta_Phi)] = delta_Phi
-    if constraints:
-        sum_phi0 = np.zeros(npol)
-        for i in range(ndish):
-            for p in range(npol):
-                sum_phi0[p] += beta_k[nprm*i+3+p]
-        # Sum (phii0 + dphi0) = 0
-        for p in range(npol):
-            b[-(p+1)] = -np.mod(sum_phi0[p], 2 * np.pi)
+    res2 = np.sum(delta_Phi**2)
+    r2.append(res2)
+    if res2 <= opts.precision:
+        print 'Exit iteration: residual^2 = %f <= given precision %f' % (res2, opts.precision)
+        break
+    # b = np.zeros(Jmat.shape[0], dtype=delta_Phi.dtype)
+    # b[:len(delta_Phi)] = delta_Phi
+    # if constraints:
+    #     sum_phi0 = np.zeros(npol)
+    #     for i in range(ndish):
+    #         for p in range(npol):
+    #             sum_phi0[p] += beta_k[nprm*i+3+p]
+    #     # Sum (phii0 + dphi0) = 0
+    #     for p in range(npol):
+    #         b[-(p+1)] = -np.mod(sum_phi0[p], 2 * np.pi)
 
     # print 'det(JT J):', np.linalg.det(np.dot(JmatT, Jmat))
     # solve for the equation (J^T J) delta_beta = J^T b
     # delta_beta = np.dot(np.linalg.inv(np.dot(JmatT, Jmat)), np.dot(JmatT, b))
-    delta_beta, resids, rank, s = la.lstsq(Jmat, b, cond=1e-6)
+    Jmat1[:, :nprm*center_dish] = Jmat[:, :nprm*center_dish]
+    Jmat1[:, nprm*center_dish:] = Jmat[:, nprm*(center_dish+1):]
+    delta_beta1, resids, rank, s = la.lstsq(Jmat1, delta_Phi, cond=1e-6)
+    delta_beta[:nprm*center_dish] = delta_beta1[:nprm*center_dish]
+    delta_beta[nprm*(center_dish+1):] = delta_beta1[nprm*center_dish:]
 
     if opts.verbose:
-        print 'cnt:', cnt
         print delta_beta
 
     beta_k += delta_beta
 
-    cnt += 1
-    if cnt >= opts.Niter or np.allclose(delta_beta, 0.0):
+    if  np.allclose(delta_beta, 0.0):
+        print 'Exit iteration: delta_beta all close to 0'
         break
+    cnt += 1
+
+if cnt >= opts.Niter:
+    print 'Warning: Get maximum number of iteration, the result may not be optimal'
 
 print beta_k
-print np.max(b)
+print np.max(delta_Phi)
 print r2
