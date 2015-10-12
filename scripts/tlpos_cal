@@ -40,9 +40,6 @@ def distance(pos1, pos2=np.zeros(3)):
 freq = 750.0 # MHz
 k0 = 2 * np.pi * (1.0e6 * freq) / (0.01 * a.const.c)
 
-# constraints = True # whether add constraints on phase
-# constraints = False # whether add constraints on phase
-# num_nf = 2 # number of near-field sources
 num_nf = 1 # number of near-field sources
 
 ndish = 16
@@ -59,16 +56,12 @@ nprm = 3 + npol # number of parameters of each antenna
 Phi = np.load('Phi.npy')
 
 # initial values
-# beta_k[5*i:5*i+5] is for [xi, yi, zi, phixi, phiyi] of antenna i, beta_k[-6:-3] is for [x, y, z] of one near-field source, beta_k[-3:] is for [x, y, z] of the other near-field source
+# beta_k[nprm*i:nprm*(i+1)] is for [xi, yi, zi, phixi, [phiyi if npol=2]] of antena i, beta_k[nprm*ndish:] are for near-field sources [x, y, z]
 # beta_k = np.zeros(nprm*ndish + 3, dtype=np.float64)
 beta_k = np.load('beta0.npy')
 Phi_k = np.zeros_like(Phi)
 
 
-# if constraints:
-#     Jmat = np.zeros((npol*num_nf*nbl+npol, len(beta_k)))
-# else:
-#     Jmat = np.zeros((npol*num_nf*nbl, len(beta_k)))
 Jmat = np.zeros((npol*num_nf*nbl, len(beta_k)))
 delta_beta = np.zeros_like(beta_k)
 Jmat1 = np.zeros((npol*num_nf*nbl, len(beta_k)-nprm)) # Jmat for antennas other than the center_dish
@@ -114,14 +107,6 @@ while cnt < opts.Niter:
                 Jmat[(n*npol+p)*nbl+ind, nprm*j+3+p:nprm*j+4+p] = -1.0
                 Jmat[(n*npol+p)*nbl+ind, slc] = k0 * (dridnf - drjdnf)
 
-    # constraints of phase: Sum phix = 0 and Sum phiy = 0
-    # if constraints:
-    #     for p in range(npol):
-    #         for i in range(ndish):
-    #             Jmat[-(p+1), nprm*i+3+p] = 1.0
-    # print 'Jmat.shape: ', Jmat.shape
-    # print 'Jmat: ', Jmat
-    # JmatT = Jmat.T
     Phi_k = np.mod(Phi_k, 2 * np.pi)
     delta_Phi = (Phi - Phi_k).reshape(-1)
     res2 = np.sum(delta_Phi**2)
@@ -129,20 +114,7 @@ while cnt < opts.Niter:
     if res2 <= opts.precision:
         print 'Exit iteration: residual^2 = %f <= given precision %f' % (res2, opts.precision)
         break
-    # b = np.zeros(Jmat.shape[0], dtype=delta_Phi.dtype)
-    # b[:len(delta_Phi)] = delta_Phi
-    # if constraints:
-    #     sum_phi0 = np.zeros(npol)
-    #     for i in range(ndish):
-    #         for p in range(npol):
-    #             sum_phi0[p] += beta_k[nprm*i+3+p]
-    #     # Sum (phii0 + dphi0) = 0
-    #     for p in range(npol):
-    #         b[-(p+1)] = -np.mod(sum_phi0[p], 2 * np.pi)
 
-    # print 'det(JT J):', np.linalg.det(np.dot(JmatT, Jmat))
-    # solve for the equation (J^T J) delta_beta = J^T b
-    # delta_beta = np.dot(np.linalg.inv(np.dot(JmatT, Jmat)), np.dot(JmatT, b))
     Jmat1[:, :nprm*center_dish] = Jmat[:, :nprm*center_dish]
     Jmat1[:, nprm*center_dish:] = Jmat[:, nprm*(center_dish+1):]
     delta_beta1, resids, rank, s = la.lstsq(Jmat1, delta_Phi, cond=1e-6)
