@@ -65,6 +65,7 @@ Phi_k = np.zeros_like(Phi)
 Jmat = np.zeros((npol*num_nf*nbl, len(beta_k)))
 delta_beta = np.zeros_like(beta_k)
 Jmat1 = np.zeros((npol*num_nf*nbl, len(beta_k)-nprm)) # Jmat for antennas other than the center_dish
+phase = np.zeros(npol*ndish)
 
 r2 = []
 cnt = 0
@@ -126,9 +127,18 @@ while cnt < opts.Niter:
 
     beta_k += delta_beta
 
-    if  np.allclose(delta_beta, 0.0):
-        print 'Exit iteration: delta_beta all close to 0'
-        break
+
+    for i in range(ndish):
+        phase[npol*i:npol*(i+1)] = beta_k[nprm*i+3:nprm*i+3+npol]
+        # beta_k[nprm*i+3:nprm*i+3+npol] = np.fmod(beta_k[nprm*i+3:nprm*i+3+npol], 2 * np.pi)
+    if (np.abs(phase) < 2 * np.pi).all():
+        if  np.allclose(delta_beta, 0.0):
+            print 'Exit iteration: delta_beta all close to 0'
+            break
+    else:
+        for i in range(ndish):
+            beta_k[nprm*i+3:nprm*i+3+npol] = np.fmod(beta_k[nprm*i+3:nprm*i+3+npol], 2 * np.pi)
+
     cnt += 1
 
 if cnt >= opts.Niter:
