@@ -9,10 +9,15 @@ import optparse
 import aipy as a
 import numpy as np
 
+
 o = optparse.OptionParser()
 o.set_usage('%s [options] *.npy' % sys.argv[0].split('/')[-1].strip())
 o.set_description(__doc__)
 a.scripting.add_standard_options(o, cal=True)
+o.add_option('-a', '--antennas', dest='antennas', default=-1,
+    help='What antennas to use, take action only when `baselines` is None. Default: -1, use all 16 dishes.')
+# o.add_option('-b', '--baselines', dest='baselines',
+#     help='What baselines to use.')
 o.add_option('-o', '--output', dest='output', default='new.uv',
     help='Output uv data file name.')
 o.add_option('-v', '--verbose', dest='verbose', action='store_true',
@@ -25,7 +30,7 @@ assert(nargs % 3 == 0)
 nfiles = nargs / 3
 freqs = np.load(args[2]) / 1.0e3 # GHZ
 aa = a.cal.get_aa(opts.cal, freqs)
-nants = 4
+nants = len(aa)
 
 if os.path.exists(opts.output):
     print 'Output file exists... Skipping'
@@ -77,9 +82,11 @@ else:
     uv.add_var('pol'     ,'i')
 
 
-
-    # ants = [1, 7, 10, 15]
-    ants = [0, 6, 9, 14] # antenna number start from 0
+    if opts.antennas == -1:
+        ants = range(nants)
+    else:
+        ants = opts.antennas.split(',')
+        ants = [int(ant) for ant in ants]
     bls = [(ants[i], ants[j]) for i in range(len(ants)) for j in range(i, len(ants))]
     for ni in range(nfiles):
         if opts.verbose:
