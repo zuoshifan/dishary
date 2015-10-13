@@ -23,6 +23,8 @@ except ImportError:
 # import os
 import sys
 import optparse
+import time
+import ephem
 import aipy as a
 import numpy as np
 import h5py
@@ -34,6 +36,10 @@ o.set_description(__doc__)
 a.scripting.add_standard_options(o, ant=True, pol=True, chan=True, cal=True, src=True, dec=True)
 o.add_option('--phs_center', dest='phs_center',
     help='Phase center to use. Options is "<az XX>_<alt XX>" in unit degrees.')
+o.add_option('--trans_time', dest='trans_time',
+    help='Transit time in local time, format: %Y/%m/%d %H:%M:%S.')
+o.add_option('--duration', dest='duration', default=600.0, type=float,
+    help='Duration of transit time in unit second, `trans_time as center point.`')
 o.add_option('-t', '--time', dest='time', default='all',
     help='Select which time sample to plot. Options are: "all" (default), "<time1 #>_<time2 #>" (a range of times to plot), or "<time1 #>,<time2 #>" (a list of times to plot).')
 o.add_option('--time_axis', dest='time_axis', default='physical',
@@ -43,6 +49,20 @@ o.add_option('-o', '--output_file', dest='output_file', default='gain.hdf5',
 o.add_option('-v', '--verbose', dest='verbose', action='store_true',
     help='Print some info.')
 opts, args = o.parse_args(sys.argv[1:])
+
+
+def dms2rad(dms):
+    """Convert angle in format dd:mm:ss to radians."""
+    d, m, s = dms.split(':')
+    return np.radians(float(d) + float(m)/60.0 + float(s)/3600.0)
+
+
+def get_jul_date(local_time, tzone='CST'):
+    start_time_gmt = time.strftime("%Y/%m/%d %H:%M:%S",
+            time.gmtime(time.mktime(time.strptime(
+                local_time+" "+ tzone, "%Y%m%d%H%M%S %Z"))))
+    start_time_jul = ephem.julian_date(start_time_gmt)
+    return start_time_jul
 
 
 def convert_arg_range(arg):
@@ -97,20 +117,22 @@ def get_uvvec(s0_top, n_top):
 
 
 assert(not opts.src is None), 'Must specify a calibrator to use'
-assert(not opts.phs_center is None), 'Must specify a phase center to use'
+# assert(not opts.phs_center is None), 'Must specify a phase center to use'
 if opts.pol == -1:
     pols = ['xx', 'yy', 'xy', 'yx']
 else:
     pols = [p for p in opts.pol.split(',')]
 assert(set(pols).issubset(set(['xx', 'yy']))), 'Now only allow xx and yy correlation'
 
-# phase center
-phc_azalt = opts.phs_center.split('_')
-assert(len(phc_azalt) == 2), 'Invalid phase center coordinate'
-phc_az, phc_alt = phc_azalt
-phc_az = np.radians(float(phc_az)) # radians
-phc_alt = np.radians(float(phc_alt)) # radians
-phc_xyz = a.coord.azalt2top((phc_az, phc_alt))
+# if opts.phs_center is None:
+#     assert opts.trans_time is not None, '`phs_center` must be specified when `trans_time` is not given'
+# # phase center
+# phc_azalt = opts.phs_center.split('_')
+# assert(len(phc_azalt) == 2), 'Invalid phase center coordinate'
+# phc_az, phc_alt = phc_azalt
+# phc_az = np.radians(float(phc_az)) # radians
+# phc_alt = np.radians(float(phc_alt)) # radians
+# phc_xyz = a.coord.azalt2top((phc_az, phc_alt))
 
 # calibrator
 srclist,cutoff,catalogs = a.scripting.parse_srcs(opts.src, opts.cat)
@@ -130,8 +152,38 @@ a.scripting.uv_selector(uv, opts.ant, opts.pol)
 chans = a.scripting.parse_chans(opts.chan, uv['nchan'])
 # freqs = a.cal.get_freqs(uv['sdf'], uv['sfreq'], uv['nchan'])
 # freqs = freqs.take(chans)
-time_sel = gen_times(opts.time, uv, opts.time_axis, opts.decimate)
+if opts.trans_time is not None:
+    trans_time = get_jul_date(opts.trans_time)
+    trans_start = trans_time - 0.5 * opts.duration / a.const.s_per_day
+    trans_end = trans_time + 0.5 * opts.duration / a.const.s_per_day
+    time = '%f_%f' % (trans_start, trans_end)
+    time_axis = 'physical'
+else:
+    time = opts.time
+    time_axis = opts.time_axis
+
+print 'time: ', time
+
+time_sel = gen_times(time, uv, time_axis, opts.decimate)
 # inttime = uv['inttime'] * opts.decimate
+
+# if opts.phs_center is None:
+#     assert opts.trans_time is not None, '`phs_center` must be specified when `trans_time` is not given'
+
+#     phc_az = s.az
+#     phc_alt = s.alt
+#     print s.az. s.alt
+#     err
+# else:
+#     # phase center
+#     phc_azalt = opts.phs_center.split('_')
+#     assert(len(phc_azalt) == 2), 'Invalid phase center coordinate'
+#     phc_az, phc_alt = phc_azalt
+#     phc_az = np.radians(float(phc_az)) # radians
+#     phc_alt = np.radians(float(phc_alt)) # radians
+#     phc_xyz = a.coord.azalt2top((phc_az, phc_alt))
+
+
 
 del(uv)
 
@@ -155,6 +207,22 @@ for uvfile in args:
     uv.select('decimate', opts.decimate, opts.decphs)
     aa = a.cal.get_aa(opts.cal, uv['sdf'], uv['sfreq'], uv['nchan'])
     aa.select_chans(chans)
+
+    # position of the phase center
+    if opts.phs_center is None:
+        assert opts.trans_time is not None, '`phs_center` must be specified when `trans_time` is not given'
+        aa.set_jultime(trans_time)
+        s.compute(aa)
+        phc_az = float(repr(s.az)) # the real value in radians can view by using repr(), while str() will give results in degree
+        phc_alt = float(repr(s.alt))
+    else:
+        # phase center
+        phc_azalt = opts.phs_center.split('_')
+        assert(len(phc_azalt) == 2), 'Invalid phase center coordinate'
+        phc_az, phc_alt = phc_azalt
+        phc_az = np.radians(float(phc_az)) # radians
+        phc_alt = np.radians(float(phc_alt)) # radians
+    phc_xyz = a.coord.azalt2top((phc_az, phc_alt))
 
     # make all antennas point to the phase center
     for ai in aa:
