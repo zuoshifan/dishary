@@ -18,6 +18,8 @@ o.add_option('-a', '--antennas', dest='antennas', default=-1,
     help='What antennas to use, take action only when `baselines` is None. Default: -1, use all 16 dishes.')
 # o.add_option('-b', '--baselines', dest='baselines',
 #     help='What baselines to use.')
+o.add_option('-d', '--data_dir', dest='data_dir',
+    help='The directory of the input data.')
 o.add_option('-o', '--output', dest='output', default='new.uv',
     help='Output uv data file name.')
 o.add_option('-v', '--verbose', dest='verbose', action='store_true',
@@ -25,10 +27,15 @@ o.add_option('-v', '--verbose', dest='verbose', action='store_true',
 opts, args = o.parse_args(sys.argv[1:])
 
 
-nargs = len(args)
-assert(nargs % 3 == 0)
-nfiles = nargs / 3
-freqs = np.load(args[2]) / 1.0e3 # GHZ
+assert len(args) > 0, 'No input data'
+if opts.data_dir is None:
+    data_dir = './'
+else:
+    data_dir = opts.data_dir + '/'
+data_fname = data_dir + args[0]
+freq_fname = data_fname.replace('.npy', '_freq.npy')
+freqs = np.load(freq_fname) / 1.0e3 # GHz
+
 aa = a.cal.get_aa(opts.cal, freqs)
 nants = len(aa)
 
@@ -88,12 +95,15 @@ else:
         ants = opts.antennas.split(',')
         ants = [int(ant) for ant in ants]
     bls = [(ants[i], ants[j]) for i in range(len(ants)) for j in range(i, len(ants))]
-    for ni in range(nfiles):
+    for ind, fname in enumerate(args):
         if opts.verbose:
-            print 'file: %d of %d' % (ni, nfiles)
-        data = np.load(args[3*ni])
-        time = np.load(args[3*ni+1])
-        # freq = np.load(args[3*ni+2])
+            print 'file: %d of %d' % (ind, len(args))
+        data_fname = data_dir + fname
+        time_fname = data_fname.replace('.npy', '_time.npy')
+        # freq_fname = data_fname.replace('.npy', '_freq.npy')
+        data = np.load(data_fname)
+        time = np.load(time_fname)
+        # freq = np.load(freq_fname)
         # print data.dtype
         for ti in range(time.size):
             if opts.verbose:
