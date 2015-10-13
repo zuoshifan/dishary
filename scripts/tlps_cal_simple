@@ -4,17 +4,6 @@ This script solves for the complex gain for each baseline by a simple point sour
 
 """
 
-# local time: 2015/9/4 01:00:00
-#         start observation
-# Transit time:
-#         The UTC   time is:  2015/9/3 18:26:58
-#         And local time is:  2015/9/4 02:26:58
-#         == Cassiopeia_A ==
-#         az = 359.99, alt = 75.29
-# Actual direction error < 0.01 degree
-### transit time: 2457269.26873
-### pointing: az:359.99, alt:75.29
-
 try:
    import cPickle as pickle
 except ImportError:
@@ -124,16 +113,6 @@ else:
     pols = [p for p in opts.pol.split(',')]
 assert(set(pols).issubset(set(['xx', 'yy']))), 'Now only allow xx and yy correlation'
 
-# if opts.phs_center is None:
-#     assert opts.trans_time is not None, '`phs_center` must be specified when `trans_time` is not given'
-# # phase center
-# phc_azalt = opts.phs_center.split('_')
-# assert(len(phc_azalt) == 2), 'Invalid phase center coordinate'
-# phc_az, phc_alt = phc_azalt
-# phc_az = np.radians(float(phc_az)) # radians
-# phc_alt = np.radians(float(phc_alt)) # radians
-# phc_xyz = a.coord.azalt2top((phc_az, phc_alt))
-
 # calibrator
 srclist,cutoff,catalogs = a.scripting.parse_srcs(opts.src, opts.cat)
 cat = a.cal.get_catalog(opts.cal, srclist, cutoff, catalogs)
@@ -166,24 +145,6 @@ print 'time: ', time
 
 time_sel = gen_times(time, uv, time_axis, opts.decimate)
 # inttime = uv['inttime'] * opts.decimate
-
-# if opts.phs_center is None:
-#     assert opts.trans_time is not None, '`phs_center` must be specified when `trans_time` is not given'
-
-#     phc_az = s.az
-#     phc_alt = s.alt
-#     print s.az. s.alt
-#     err
-# else:
-#     # phase center
-#     phc_azalt = opts.phs_center.split('_')
-#     assert(len(phc_azalt) == 2), 'Invalid phase center coordinate'
-#     phc_az, phc_alt = phc_azalt
-#     phc_az = np.radians(float(phc_az)) # radians
-#     phc_alt = np.radians(float(phc_alt)) # radians
-#     phc_xyz = a.coord.azalt2top((phc_az, phc_alt))
-
-
 
 del(uv)
 
