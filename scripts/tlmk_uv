@@ -16,6 +16,8 @@ o.set_description(__doc__)
 a.scripting.add_standard_options(o, cal=True)
 o.add_option('-a', '--antennas', dest='antennas', default=-1,
     help='What antennas to use, take action only when `baselines` is None. Default: -1, use all 16 dishes.')
+o.add_option('--start0', dest='start0', action='store_true',
+     help='Antenna No. starts from 0 if True.')
 # o.add_option('-b', '--baselines', dest='baselines',
 #     help='What baselines to use.')
 o.add_option('-d', '--data_dir', dest='data_dir',
@@ -94,6 +96,9 @@ else:
     else:
         ants = opts.antennas.split(',')
         ants = [int(ant) for ant in ants]
+        if not opts.start0:
+            print 'NOTE: antenna NO. does not start from 0, but from 1...'
+            ants = [ant-1 for ant in ants]
     bls = [(ants[i], ants[j]) for i in range(len(ants)) for j in range(i, len(ants))]
     for ind, fname in enumerate(args):
         if opts.verbose:
