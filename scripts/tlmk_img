@@ -9,6 +9,7 @@ Modified from the same named script of Aaron Parsons by Shifan Zuo.
 """
 
 import aipy as a, numpy as n, sys, optparse, ephem, os
+import h5py
 
 o = optparse.OptionParser()
 o.set_usage('%s [options] *.uv' % sys.argv[0].split('/')[-1].strip())
@@ -111,12 +112,14 @@ if opts.list_facets:
 
 # Generate the image object that will be used.
 us,vs,ws,ds,wgts = [],[],[],[],[]
+uvws = []
 if opts.separate:
     im = []
     for i in range(nchan):
         us.append([])
         vs.append([])
         ws.append([])
+        uvws.append([])
         ds.append([])
         wgts.append([])
         if opts.no_w:
@@ -151,12 +154,12 @@ def natpattern(num):
     """Pattern that prints out a number upto `n` (natural number - no sign)."""
     return ("%0" + repr(int(n.ceil(n.log10(num + 1)))) + "d")
 
-def fname(ftag, cnt, chan=None):
+def fname(ftag, cnt, chan=None, suffix='fits'):
     """Generate a proper file name for the FITS image."""
     if chan is None:
-        return '%s.all.%s.fits' % (opts.fmt % cnt, ftag)
+        return '%s.all.%s.%s' % (opts.fmt % cnt, ftag, suffix)
     else:
-        return ('%s.%s.%s.fits' % (opts.fmt % cnt, natpattern(max(chans)), ftag)) % chan[1]
+        return ('%s.%s.%s.%s' % (opts.fmt % cnt, natpattern(max(chans)), ftag, suffix)) % chan[1]
 
 def to_fits(ftag, i, src, cnt, chan=None, history=''):
     """A quick function writes an image to a FITS file."""
@@ -182,6 +185,23 @@ def to_fits(ftag, i, src, cnt, chan=None, history=''):
         ra=cen.ra*a.img.rad2deg, dec=cen.dec*a.img.rad2deg, epoch=2000.,
         d_ra=L[-1,-1]*a.img.rad2deg, d_dec=M[1,1]*a.img.rad2deg,
         freq=freq, history=history)
+
+def to_hdf5(ftag, uvws, src, cnt, chan=None, history=''):
+    """A quick function writes an uvws dataset to a hdf5 file."""
+    filename = fname(ftag, cnt, chan, 'hdf5')
+    print 'Saving data to', filename
+    if chan is None:
+        freq = afreqs
+    else:
+        freq = afreqs[chan[0]]
+    with h5py.File(filename, 'w') as f:
+        f.create_dataset('uvw', data=uvws)
+        f.attrs['axes'] = ('time', 'uvw (u, v, w)')
+        f.attrs['object'] = src.src_name
+        f.attrs['obs_date'] = str(aa.date)
+        f.attrs['freq'] = freq
+        f.attrs['history'] = history
+
 
 def grid_it(im,us,vs,ws,ds,wgts):
     #print 'Gridding %d integrations' % n_ints
@@ -241,6 +261,9 @@ for srccnt, s in enumerate(cat.values()):
                                     except(ValueError):
                                         uvs = n.abs(im[i].uv)
                                         bms,dim,dbm = uvs,uvs,uvs
+                                    # save uvws to file
+                                    ntime = len(uvws[i])
+                                    to_hdf5('uvw', n.array(uvws[i]), s, imgcnt, [i, chans[i]], history=history)
                                     for k in ['uvs','bms','dim','dbm']:
                                         if k in outputs: to_fits(k, eval(k), s, imgcnt, [i, chans[i]], history=history)
                                     us[i],vs[i],ws[i],ds[i],wgts[i] = [],[],[],[],[]
@@ -251,6 +274,9 @@ for srccnt, s in enumerate(cat.values()):
                                 except(ValueError):
                                     uvs = n.abs(im.uv)
                                     bms,dim,dbm = uvs,uvs,uvs
+                                # save uvws to file
+                                ntime = len(uvws[i])
+                                to_hdf5('uvw', n.array(uvws).reshape(-1, 3), s, imgcnt, None, history=history)
                                 for k in ['uvs','bms','dim','dbm']:
                                     if k in outputs: to_fits(k, eval(k), s, imgcnt, None, history=history)
                                 us,vs,ws,ds,wgts = [],[],[],[],[]
@@ -305,6 +331,7 @@ for srccnt, s in enumerate(cat.values()):
                         us[i].append(n.array([u[0][i]]))
                         vs[i].append(n.array([v[0][i]]))
                         ws[i].append(n.array([w[0][i]]))
+                        uvws[i].append(n.array([u[0][i], v[0][i], w[0][i]]))
                         wgts[i].append(n.array([wgt[i]]))
 
                     # If data buffer is full, grid data
@@ -317,9 +344,11 @@ for srccnt, s in enumerate(cat.values()):
                 if len(d) == 0: continue
                 n_ints += 1
                 ds.append(d)
-                us.append(u.compress(valid))
-                vs.append(v.compress(valid))
-                ws.append(w.compress(valid))
+                u, v, w = u.compress(valid), v.compress(valid), w.compress(valid)
+                us.append(u)
+                vs.append(v)
+                ws.append(w)
+                uvws.append(n.vstack(u, v, w).T)
                 wgts.append(wgt.compress(valid))
                 # If data buffer is full, grid data
                 if len(ds) * len(chans) > opts.buf_thresh:
@@ -335,6 +364,9 @@ for srccnt, s in enumerate(cat.values()):
             except(ValueError):
                 print 'No data: skipping output file.'
                 continue
+            # save uvws to file
+            ntime = len(uvws[i])
+            to_hdf5('uvw', n.array(uvws[i]), s, imgcnt, [i, chans[i]], history=history)
             for k in ['uvs','bms','dim','dbm']:
                 if k in outputs: to_fits(k, eval(k), s, imgcnt, [i, chans[i]], history=history)
             us[i],vs[i],ws[i],ds[i],wgts[i] = [],[],[],[],[]
@@ -351,6 +383,9 @@ for srccnt, s in enumerate(cat.values()):
         except(ValueError):
             print 'No data: skipping output file.'
             continue
+        # save uvws to file
+        ntime = len(uvws)
+        to_hdf5('uvw', n.array(uvws).reshape(-1, 3), s, imgcnt, None, history=history)
         for k in ['uvs','bms','dim','dbm']:
             if k in outputs: to_fits(k, eval(k), s, imgcnt, None, history=history)
         us,vs,ws,ds,wgts = [],[],[],[],[]
