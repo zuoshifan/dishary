@@ -32,8 +32,10 @@ def latlong_conv(lat):
     return lat * np.pi / 180.0
 
 # location of the antenna array
-lat = '44:9:11.00'
-lon = '91:48:23.00'
+# lat = '44:9:11.00'
+# lon = '91:48:23.00'
+lat = '44:9:8.439'
+lon = '91:48:20.177'
 elev = 1504.3 # m
 
 # (+E, +N) coordinates of each antenna in unit m
