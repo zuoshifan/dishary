@@ -40,7 +40,8 @@ def distance(pos1, pos2=np.zeros(3)):
 freq = 750.0 # MHz
 k0 = 2 * np.pi * (1.0e6 * freq) / (0.01 * a.const.c)
 
-num_nf = 2 # number of near-field sources
+fix_nf = True # fix the position of near-field sources
+num_nf = 3 # number of near-field sources
 
 ndish = 16
 # the reference dish
@@ -64,7 +65,10 @@ Phi_k = np.zeros_like(Phi)
 
 Jmat = np.zeros((npol*num_nf*nbl, len(beta_k)))
 delta_beta = np.zeros_like(beta_k)
-Jmat1 = np.zeros((npol*num_nf*nbl, len(beta_k)-nprm)) # Jmat for antennas other than the center_dish
+if fix_nf:
+    Jmat1 = np.zeros((npol*num_nf*nbl, len(beta_k)-nprm-3*num_nf)) # Jmat for antennas other than the center_dish
+else:
+    Jmat1 = np.zeros((npol*num_nf*nbl, len(beta_k)-nprm)) # Jmat for antennas other than the center_dish
 phase = np.zeros(npol*ndish)
 
 r2 = []
@@ -117,10 +121,18 @@ while cnt < opts.Niter:
         break
 
     Jmat1[:, :nprm*center_dish] = Jmat[:, :nprm*center_dish]
-    Jmat1[:, nprm*center_dish:] = Jmat[:, nprm*(center_dish+1):]
+    if fix_nf:
+        Jmat1[:, nprm*center_dish:] = Jmat[:, nprm*(center_dish+1):-3*num_nf]
+    else:
+        Jmat1[:, nprm*center_dish:] = Jmat[:, nprm*(center_dish+1):]
+    print 'Jmat1.shape:', Jmat1.shape
+    print 'det(Jmat1.T x Jmat1):', la.det(np.dot(Jmat1.T, Jmat1))
     delta_beta1, resids, rank, s = la.lstsq(Jmat1, delta_Phi, cond=1e-6)
     delta_beta[:nprm*center_dish] = delta_beta1[:nprm*center_dish]
-    delta_beta[nprm*(center_dish+1):] = delta_beta1[nprm*center_dish:]
+    if fix_nf:
+        delta_beta[nprm*(center_dish+1):-3*num_nf] = delta_beta1[nprm*center_dish:]
+    else:
+        delta_beta[nprm*(center_dish+1):] = delta_beta1[nprm*center_dish:]
 
     if opts.verbose:
         print delta_beta
