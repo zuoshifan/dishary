@@ -40,7 +40,7 @@ def distance(pos1, pos2=np.zeros(3)):
 freq = 750.0 # MHz
 k0 = 2 * np.pi * (1.0e6 * freq) / (0.01 * a.const.c)
 
-num_nf = 1 # number of near-field sources
+num_nf = 2 # number of near-field sources
 
 ndish = 16
 # the reference dish
@@ -144,6 +144,7 @@ while cnt < opts.Niter:
 if cnt >= opts.Niter:
     print 'Warning: Get maximum number of iteration, the result may not be optimal'
 
-print beta_k
+print np.load('beta1.npy') # true values
+print beta_k # solved values
 print np.max(delta_Phi)
 print r2
