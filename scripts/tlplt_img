@@ -16,6 +16,8 @@ o.set_description(__doc__)
 a.scripting.add_standard_options(o, chan=True, cmap=True, max=True, drng=True)
 o.add_option('-m', '--mode', dest='mode', default='lin',
     help='Plot mode can be log (logrithmic), lin (linear), phs (phase), real, or imag.')
+o.add_option('--fov', dest='fov', type=float, default=10.0,
+             help='Field of view in unit degree to plot. Default is 10 degree.')
 o.add_option('-o', '--outfile', dest='outfile', default='',
     help='If provided, will save the figure to the specified file instead of popping up a window.')
 o.add_option('-p', '--pol', dest='pol', type='int', default=0, 
@@ -69,6 +71,11 @@ for cnt, filename in enumerate(args):
 
     # Put array in (ra,dec) order for plotting
     d = d.transpose((ra_ax,dec_ax))
+    # select the specified range of data
+    xshp, yshp = d.shape
+    nx = min(xshp, opts.fov / n.abs(kwds['d_ra']))
+    ny = min(yshp, opts.fov / n.abs(kwds['d_dec']))
+    d = d[(xshp-nx)/2:(xshp+nx)/2, (yshp-ny)/2:(yshp+ny)/2]
 
     # Generate plots
     if opts.fft:
@@ -76,7 +83,9 @@ for cnt, filename in enumerate(args):
         d = a.img.recenter(d, (d.shape[0]/2, d.shape[1]/2))
     if opts.mode.startswith('phs'): d = n.angle(d)
     # elif opts.mode.startswith('lin'): d = n.absolute(d)
-    elif opts.mode.startswith('lin'): d = d
+    elif opts.mode.startswith('lin'):
+        if not n.isrealobj(d):
+            d = n.absolute(d)
     elif opts.mode.startswith('real'): d = d.real
     elif opts.mode.startswith('imag'): d = d.imag
     elif opts.mode.startswith('log'):
@@ -84,10 +93,10 @@ for cnt, filename in enumerate(args):
         d = n.ma.masked_less_equal(d, 0)
         d = n.ma.log10(d)
 
-    if not opts.max is None: max = opts.max
-    else: max = d.max()
-    if not opts.drng is None: min = max - opts.drng
-    else: min = d.min()
+    if not opts.max is None: dmax = opts.max
+    else: dmax = d.max()
+    if not opts.drng is None: dmin = dmax - opts.drng
+    else: dmin = d.min()
 
     p.figure(figsize=(8, 6))
     p.subplot(m2, m1, cnt+1)
@@ -107,8 +116,8 @@ for cnt, filename in enumerate(args):
         map.drawmeridians(n.arange(0,360,30), latmax=90.0, labels=[1, 1, 1, 1])
         map.drawparallels(n.arange(-90,90,2))
         map.drawmapboundary()
-        map.imshow(d, vmin=min, vmax=max, cmap=cmap, interpolation='nearest')
-    else: p.imshow(d, vmin=min, vmax=max, origin='lower', cmap=cmap, interpolation='nearest')
+        map.imshow(d, vmin=dmin, vmax=dmax, cmap=cmap, interpolation='nearest')
+    else: p.imshow(d, vmin=dmin, vmax=dmax, origin='lower', cmap=cmap, interpolation='nearest')
     p.colorbar(shrink=.5, fraction=.05)
     # p.title(filename)
 
