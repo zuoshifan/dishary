@@ -1,11 +1,22 @@
 #!/usr/bin/env python
 
+# try:
+#     import cPickle as pickle
+# except:
+#     import pickle
+# import pickle
+import sys
 import numpy as np
 import emcee
+from emcee.utils import MPIPool
 import triangle
 import aipy as a
 
 
+pool = MPIPool(loadbalance=True)
+if not pool.is_master():
+    pool.wait()
+    sys.exit(0)
 
 # common
 def rand0(size):
@@ -17,10 +28,9 @@ def distance(pos1, pos2=np.zeros(3)):
     r = pos1 - pos2
     return np.sqrt(r[0]**2 + r[1]**2 + r[2]**2)
 
+
 freq = 750.0 # MHz
 k0 = 2 * np.pi * (1.0e6 * freq) / (0.01 * a.const.c)
-
-
 
 # options
 add_noise = False # add some noise to the simulated phase
@@ -72,56 +82,61 @@ antpos = np.zeros((ndish, 3))
 antpos[:, :2] = np.loadtxt('/home/zuoshifan/programming/python/21cmcosmology/dishary/example_cal/tldishes/16dishes_coord.txt')[:ndish]
 antpos -= antpos[center_dish]
 
-# initial phase of each dish of the two pol
-# phi = 2 * np.pi * rand0((ndish, npol)) # phase relative to the center dish, between (-2pi, 2pi)
-phi = np.zeros((ndish, npol)) # initial value 0
-phi[center_dish] = 0
 
-# perturbed values
-# pos perturbation in [-r, r] m
-if fix_nf:
-    nf1 = nf
-else:
-    nf1 = nf + r * rand0(3*num_nf)
-dantpos = r * rand0((ndish, 3))
-dantpos[center_dish] = 0
-antpos1 = antpos + dantpos
-# phase perturbation in [-r, r] rad
-dphi = ph_r * rand0((ndish, npol))
-# dphi = 2 * np.pi * rand0((ndish, npol))
-dphi[center_dish] = 0
-phi1 = np.fmod(phi + dphi, 2 * np.pi)
+if pool.is_master():
+    # initial phase of each dish of the two pol
+    # phi = 2 * np.pi * rand0((ndish, npol)) # phase relative to the center dish, between (-2pi, 2pi)
+    phi = np.zeros((ndish, npol)) # initial value 0
+    phi[center_dish] = 0
 
-# compute phase of measurements
-for n in range(num_nf):
-    for ind, (i, j) in enumerate(bls):
-        if n == 0:
-            slc = slice(-3, None)
-        else:
-            slc = slice(-3*(n+1), -3*n)
-        ri = distance(nf1[slc], antpos1[i])
-        rj = distance(nf1[slc], antpos1[j])
-        for p in range(npol):
-            phii = phi1[i, p]
-            phij = phi1[j, p]
-            Phi[n, p, ind] = k0 * (ri - rj) + phii - phij
-if add_noise:
-    Phi += np.random.normal(0.0, sigma, (num_nf, npol, nbl))
-Phi = np.mod(Phi, 2 * np.pi)
+    # perturbed values
+    # pos perturbation in [-r, r] m
+    if fix_nf:
+        nf1 = nf
+    else:
+        nf1 = nf + r * rand0(3*num_nf)
+    dantpos = r * rand0((ndish, 3))
+    dantpos[center_dish] = 0
+    antpos1 = antpos + dantpos
+    # phase perturbation in [-r, r] rad
+    dphi = ph_r * rand0((ndish, npol))
+    # dphi = 2 * np.pi * rand0((ndish, npol))
+    dphi[center_dish] = 0
+    phi1 = np.fmod(phi + dphi, 2 * np.pi)
 
-beta0 = np.zeros(nprm*ndish + 3*num_nf)
-beta1 = np.zeros(nprm*ndish + 3*num_nf)
-for i in range(ndish):
-    beta0[nprm*i:nprm*i+3] = antpos[i]
-    beta0[nprm*i+3:nprm*i+3+npol] = phi[i]
-    beta1[nprm*i:nprm*i+3] = antpos1[i]
-    beta1[nprm*i+3:nprm*i+3+npol] = phi1[i]
-beta0[-3*num_nf:] = nf
-beta1[-3*num_nf:] = nf1
-#######################################################################
+    # compute phase of measurements
+    for n in range(num_nf):
+        for ind, (i, j) in enumerate(bls):
+            if n == 0:
+                slc = slice(-3, None)
+            else:
+                slc = slice(-3*(n+1), -3*n)
+            ri = distance(nf1[slc], antpos1[i])
+            rj = distance(nf1[slc], antpos1[j])
+            for p in range(npol):
+                phii = phi1[i, p]
+                phij = phi1[j, p]
+                Phi[n, p, ind] = k0 * (ri - rj) + phii - phij
+    if add_noise:
+        Phi += np.random.normal(0.0, sigma, (num_nf, npol, nbl))
+    Phi = np.mod(Phi, 2 * np.pi)
+
+    beta0 = np.zeros(nprm*ndish + 3*num_nf)
+    beta1 = np.zeros(nprm*ndish + 3*num_nf)
+    for i in range(ndish):
+        beta0[nprm*i:nprm*i+3] = antpos[i]
+        beta0[nprm*i+3:nprm*i+3+npol] = phi[i]
+        beta1[nprm*i:nprm*i+3] = antpos1[i]
+        beta1[nprm*i+3:nprm*i+3+npol] = phi1[i]
+    beta0[-3*num_nf:] = nf
+    beta1[-3*num_nf:] = nf1
+    #######################################################################
 
 
 
+Phi = pool.comm.bcast(Phi, root=0)
+beta0 = pool.comm.bcast(beta0, root=0)
+beta1 = pool.comm.bcast(beta1, root=0)
 ########################################################################
 # solve parameters by minimization chi^2
 # initial values
@@ -216,6 +231,11 @@ def lnprob(x):
         return -np.inf
     return lp + lnlike(x)
 
+# pool = MPIPool(loadbalance=True)
+# if not pool.is_master():
+#     pool.wait()
+#     sys.exit(0)
+
 # Set up the sampler.
 ndim, nwalkers = len(x0), 500
 pos = [x0 + bnds*rand0(ndim) for i in range(nwalkers)]
@@ -223,12 +243,14 @@ sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob)
 
 # Clear and run the production chain.
 print("Running MCMC...")
-sampler.run_mcmc(pos, 1000, rstate0=np.random.get_state())
+burnin = 100
+pos, prob, state = sampler.run_mcmc(pos, burnin, rstate0=np.random.get_state())
+sampler.run_mcmc(pos, 10, rstate0=np.random.get_state())
 print("Done.")
 
+
 # Make the triangle plot.
-burnin = 50
-samples = sampler.chain[:, burnin:, :].reshape((-1, ndim))
+samples = sampler.chain.reshape((-1, ndim))
 
 # Compute the quantiles.
 samples[:, 2] = np.exp(samples[:, 2])
@@ -236,3 +258,6 @@ x_mcmc = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]),
                              zip(*np.percentile(samples, [16, 50, 84],
                                                 axis=0)))
 print x_mcmc
+
+
+pool.close()
