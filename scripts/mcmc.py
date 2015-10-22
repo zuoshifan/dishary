@@ -7,11 +7,11 @@
 # import pickle
 import sys
 import numpy as np
-import matplotlib
-matplotlib.use('Agg')
+# import matplotlib
+# matplotlib.use('Agg')
 import emcee
 from emcee.utils import MPIPool
-import triangle
+# import triangle
 import aipy as a
 
 
@@ -37,23 +37,23 @@ freq = 750.0 # MHz
 k0 = 2 * np.pi * (1.0e6 * freq) / (0.01 * a.const.c)
 
 # options
-add_noise = False # add some noise to the simulated phase
-sigma = 0.001 # sigma of the noise
-fix_nf = True # fix the position of near-field sources
+add_noise = True # add some noise to the simulated phase
+sigma = 0.1 # sigma of the noise
+fix_nf = False # fix the position of near-field sources
 num_nf = 2 # number of near-field sources
 npol = 2 # use only xx and yy
 # r = 2 * np.pi
 # r = 5
 # r = 0.5
-# r = 0.05
+r = 0.05
 # r = 0.01
 # r = 0.005
 # r = 0.0001
-r = 1e-8
+# r = 1e-8
 # r = 0.0
 # ph_r = 0.1
-ph_r = 0.1
-# ph_r = 2 * np.pi
+# ph_r = 0.0001
+ph_r = 2 * np.pi
 
 
 ########################################################################
@@ -166,7 +166,7 @@ if pool.is_master():
         bnds = np.zeros(nprm*(ndish-1)+3*num_nf, dtype=beta0.dtype)
         for i in range(ndish-1): # for center_dish == 15 only
             bnds[nprm*i:nprm*(i+1)] = bnd
-        bnds[-3*num_nf] = r
+        bnds[-3*num_nf:] = r
 
 Phi = pool.bcast(Phi, root=0)
 x0 = pool.bcast(x0, root=0)
@@ -210,18 +210,6 @@ def chi2(x):
     tmp_Phi = np.mod(tmp_Phi, 2*np.pi)
     return np.sum((Phi - tmp_Phi)**2)
 
-# bounds of the values
-# bnds = []
-# for i in range(ndish-1): #NOTE: this only applies to center_dish = 15 case
-#     for j in range(3):
-#         bnds += [(x0[5*i+j] - r, x0[5*i+j] + r)]
-#     for p in range(npol):
-#         bnds += [(x0[5*i+3+p] - ph_r, x0[5*i+3+p] + ph_r)]
-# if not fix_nf:
-#     for n in range(num_nf):
-#         for j in range(3):
-#             bnds += [(x0[-3*(n+1)+j] - r, x0[-3*(n+1)+j] + r)]
-
 
 # Define the probability function as likelihood * prior.
 def lnprior(x):
@@ -257,7 +245,7 @@ print("Running MCMC...")
 # Run 100 steps as a burn-in.
 # burnin = 1
 # pos, prob, state = sampler.run_mcmc(pos, burnin, rstate0=np.random.get_state())
-pos, prob, state = sampler.run_mcmc(pos, 1000, rstate0=np.random.get_state())
+pos, prob, state = sampler.run_mcmc(pos, 10000, rstate0=np.random.get_state())
 # Reset the chain to remove the burn-in samples.
 # sampler.reset()
 # Starting from the final position in the burn-in chain, sample for 1000 steps.
@@ -273,10 +261,16 @@ print("Done.")
 
 samples = sampler.chain.reshape((-1, ndim))
 lnprobs = sampler.lnprobability.reshape(-1)
-print np.max(lnprobs)
+print 'Optimal res2 and x:'
+print -2 * np.max(lnprobs)
 print samples[np.argmax(lnprobs)]
-print chi2(samples[np.argmax(lnprobs)])
-print sampler.get_lnprob(samples[np.argmax(lnprobs)]) * (-2)
+print 'Real res2 and x:'
+print chi2(x1)
+print x1
+print 'difference:'
+print x1 - samples[np.argmax(lnprobs)]
+# print chi2(samples[np.argmax(lnprobs)])
+# print sampler.get_lnprob(samples[np.argmax(lnprobs)]) * (-2)
 
 # import corner
 # fig = corner.corner(samples[:, :5])
