@@ -15,8 +15,8 @@ import triangle
 import aipy as a
 
 
-# # Initialize the MPI-based pool used for parallelization.
-# pool = MPIPool(loadbalance=True)
+# Initialize the MPI-based pool used for parallelization.
+pool = MPIPool(loadbalance=True)
 # if not pool.is_master():
 #     # Wait for instructions from the master process.
 #     pool.wait()
@@ -87,94 +87,93 @@ antpos[:, :2] = np.loadtxt('/home/zuoshifan/programming/python/21cmcosmology/dis
 antpos -= antpos[center_dish]
 
 
-# initial phase of each dish of the two pol
-# phi = 2 * np.pi * rand0((ndish, npol)) # phase relative to the center dish, between (-2pi, 2pi)
-phi = np.zeros((ndish, npol)) # initial value 0
-phi[center_dish] = 0
+x0, x1, bnds = None, None, None
+beta0, beta1 = None, None
+if pool.is_master():
+    # initial phase of each dish of the two pol
+    # phi = 2 * np.pi * rand0((ndish, npol)) # phase relative to the center dish, between (-2pi, 2pi)
+    phi = np.zeros((ndish, npol)) # initial value 0
+    phi[center_dish] = 0
 
-# perturbed values
-# pos perturbation in [-r, r] m
-if fix_nf:
-    nf1 = nf
-else:
-    nf1 = nf + r * rand0(3*num_nf)
-dantpos = r * rand0((ndish, 3))
-dantpos[center_dish] = 0
-antpos1 = antpos + dantpos
-# phase perturbation in [-r, r] rad
-dphi = ph_r * rand0((ndish, npol))
-# dphi = 2 * np.pi * rand0((ndish, npol))
-dphi[center_dish] = 0
-phi1 = np.fmod(phi + dphi, 2 * np.pi)
+    # perturbed values
+    # pos perturbation in [-r, r] m
+    if fix_nf:
+        nf1 = nf
+    else:
+        nf1 = nf + r * rand0(3*num_nf)
+    dantpos = r * rand0((ndish, 3))
+    dantpos[center_dish] = 0
+    antpos1 = antpos + dantpos
+    # phase perturbation in [-r, r] rad
+    dphi = ph_r * rand0((ndish, npol))
+    # dphi = 2 * np.pi * rand0((ndish, npol))
+    dphi[center_dish] = 0
+    phi1 = np.fmod(phi + dphi, 2 * np.pi)
 
-# compute phase of measurements
-for n in range(num_nf):
-    for ind, (i, j) in enumerate(bls):
-        if n == 0:
-            slc = slice(-3, None)
-        else:
-            slc = slice(-3*(n+1), -3*n)
-        ri = distance(nf1[slc], antpos1[i])
-        rj = distance(nf1[slc], antpos1[j])
-        for p in range(npol):
-            phii = phi1[i, p]
-            phij = phi1[j, p]
-            Phi[n, p, ind] = k0 * (ri - rj) + phii - phij
-if add_noise:
-    Phi += np.random.normal(0.0, sigma, (num_nf, npol, nbl))
-Phi = np.mod(Phi, 2 * np.pi)
+    # compute phase of measurements
+    for n in range(num_nf):
+        for ind, (i, j) in enumerate(bls):
+            if n == 0:
+                slc = slice(-3, None)
+            else:
+                slc = slice(-3*(n+1), -3*n)
+            ri = distance(nf1[slc], antpos1[i])
+            rj = distance(nf1[slc], antpos1[j])
+            for p in range(npol):
+                phii = phi1[i, p]
+                phij = phi1[j, p]
+                Phi[n, p, ind] = k0 * (ri - rj) + phii - phij
+    if add_noise:
+        Phi += np.random.normal(0.0, sigma, (num_nf, npol, nbl))
+    Phi = np.mod(Phi, 2 * np.pi)
 
-beta0 = np.zeros(nprm*ndish + 3*num_nf)
-beta1 = np.zeros(nprm*ndish + 3*num_nf)
-for i in range(ndish):
-    beta0[nprm*i:nprm*i+3] = antpos[i]
-    beta0[nprm*i+3:nprm*i+3+npol] = phi[i]
-    beta1[nprm*i:nprm*i+3] = antpos1[i]
-    beta1[nprm*i+3:nprm*i+3+npol] = phi1[i]
-beta0[-3*num_nf:] = nf
-beta1[-3*num_nf:] = nf1
-#######################################################################
+    beta0 = np.zeros(nprm*ndish + 3*num_nf)
+    beta1 = np.zeros(nprm*ndish + 3*num_nf)
+    for i in range(ndish):
+        beta0[nprm*i:nprm*i+3] = antpos[i]
+        beta0[nprm*i+3:nprm*i+3+npol] = phi[i]
+        beta1[nprm*i:nprm*i+3] = antpos1[i]
+        beta1[nprm*i+3:nprm*i+3+npol] = phi1[i]
+    beta0[-3*num_nf:] = nf
+    beta1[-3*num_nf:] = nf1
+    #######################################################################
 
 
-########################################################################
-# solve parameters by minimization chi^2
-# initial values
-# beta_k[nprm*i:nprm*(i+1)] is for [xi, yi, zi, phixi, [phiyi if npol=2]] of antena i, beta_k[nprm*ndish:] are for near-field sources [x, y, z]
-# beta_k = np.zeros(nprm*ndish + 3, dtype=np.float64)
-bnd = np.zeros(nprm, dtype=beta0.dtype) + r
-bnd[-npol:] = ph_r
-if fix_nf:
-    x0 = np.zeros(nprm*(ndish-1), dtype=beta0.dtype) # as inital values
-    x0[:nprm*center_dish] = beta0[:nprm*center_dish]
-    x0[nprm*center_dish:] = beta0[nprm*(center_dish+1):nprm*ndish]
-    x1 = np.zeros(nprm*(ndish-1), dtype=beta1.dtype) # the true values
-    x1[:nprm*center_dish] = beta1[:nprm*center_dish]
-    x1[nprm*center_dish:] = beta1[nprm*(center_dish+1):nprm*ndish]
-    bnds = np.zeros(nprm*(ndish-1), dtype=beta0.dtype) # as bounds of values
-    for i in range(ndish-1): # for center_dish == 15 only
-        bnds[nprm*i:nprm*(i+1)] = bnd
-else:
-    x0 = np.zeros(nprm*(ndish-1)+3*num_nf, dtype=beta0.dtype)
-    x0[:nprm*center_dish] = beta0[:nprm*center_dish]
-    x0[nprm*center_dish:] = beta0[nprm*(center_dish+1):]
-    x1 = np.zeros(nprm*(ndish-1)+3*num_nf, dtype=beta1.dtype)
-    x1[:nprm*center_dish] = beta1[:nprm*center_dish]
-    x1[nprm*center_dish:] = beta1[nprm*(center_dish+1):]
-    bnds = np.zeros(nprm*(ndish-1)+3*num_nf, dtype=beta0.dtype)
-    for i in range(ndish-1): # for center_dish == 15 only
-        bnds[nprm*i:nprm*(i+1)] = bnd
-    bnds[-3*num_nf] = r
+    ########################################################################
+    # solve parameters by minimization chi^2
+    # initial values
+    # beta_k[nprm*i:nprm*(i+1)] is for [xi, yi, zi, phixi, [phiyi if npol=2]] of antena i, beta_k[nprm*ndish:] are for near-field sources [x, y, z]
+    # beta_k = np.zeros(nprm*ndish + 3, dtype=np.float64)
+    bnd = np.zeros(nprm, dtype=beta0.dtype) + r
+    bnd[-npol:] = ph_r
+    if fix_nf:
+        x0 = np.zeros(nprm*(ndish-1), dtype=beta0.dtype) # as inital values
+        x0[:nprm*center_dish] = beta0[:nprm*center_dish]
+        x0[nprm*center_dish:] = beta0[nprm*(center_dish+1):nprm*ndish]
+        x1 = np.zeros(nprm*(ndish-1), dtype=beta1.dtype) # the true values
+        x1[:nprm*center_dish] = beta1[:nprm*center_dish]
+        x1[nprm*center_dish:] = beta1[nprm*(center_dish+1):nprm*ndish]
+        bnds = np.zeros(nprm*(ndish-1), dtype=beta0.dtype) # as bounds of values
+        for i in range(ndish-1): # for center_dish == 15 only
+            bnds[nprm*i:nprm*(i+1)] = bnd
+    else:
+        x0 = np.zeros(nprm*(ndish-1)+3*num_nf, dtype=beta0.dtype)
+        x0[:nprm*center_dish] = beta0[:nprm*center_dish]
+        x0[nprm*center_dish:] = beta0[nprm*(center_dish+1):]
+        x1 = np.zeros(nprm*(ndish-1)+3*num_nf, dtype=beta1.dtype)
+        x1[:nprm*center_dish] = beta1[:nprm*center_dish]
+        x1[nprm*center_dish:] = beta1[nprm*(center_dish+1):]
+        bnds = np.zeros(nprm*(ndish-1)+3*num_nf, dtype=beta0.dtype)
+        for i in range(ndish-1): # for center_dish == 15 only
+            bnds[nprm*i:nprm*(i+1)] = bnd
+        bnds[-3*num_nf] = r
 
-# print 'x0:', x0
-# print 'x1:', x1
-# print 'bnds:', bnds
-
-class Rx(object):
-    def __init__(self, r, x):
-        self.r = r # as the priority, smaller r for higher priority
-        self.x = x
-    def __cmp__(self, other):
-        return cmp(other.r, self.r)
+Phi = pool.bcast(Phi, root=0)
+x0 = pool.bcast(x0, root=0)
+x1 = pool.bcast(x1, root=0)
+beta0 = pool.bcast(beta0, root=0)
+beta1 = pool.bcast(beta1, root=0)
+bnds = pool.bcast(bnds, root=0)
 
 def chi2(x):
     tmp_Phi = np.zeros_like(Phi)
@@ -240,14 +239,14 @@ def lnprob(x):
         return -np.inf
     return lp + lnlike(x)
 
-pool = MPIPool(loadbalance=True)
+# pool = MPIPool(loadbalance=True)
 if not pool.is_master():
     pool.wait()
     sys.exit(0)
 
 # Set up the sampler.
-# ndim, nwalkers = len(x0), 500
-ndim, nwalkers = len(x0), 150
+ndim, nwalkers = len(x0), 1000
+# ndim, nwalkers = len(x0), 150
 pos = [x0 + bnds*rand0(ndim) for i in range(nwalkers)]
 # Initialize the sampler with the chosen specs.
 sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, pool=pool)
@@ -256,40 +255,53 @@ sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, pool=pool)
 # Clear and run the production chain.
 print("Running MCMC...")
 # Run 100 steps as a burn-in.
-burnin = 1
+# burnin = 1
 # pos, prob, state = sampler.run_mcmc(pos, burnin, rstate0=np.random.get_state())
-pos, prob, state = sampler.run_mcmc(pos, burnin)
+pos, prob, state = sampler.run_mcmc(pos, 1000, rstate0=np.random.get_state())
 # Reset the chain to remove the burn-in samples.
-sampler.reset()
+# sampler.reset()
 # Starting from the final position in the burn-in chain, sample for 1000 steps.
-sampler.run_mcmc(pos, 10, rstate0=state)
+# sampler.run_mcmc(pos, 20, rstate0=state)
 print("Done.")
 
-# Close the processes.
-pool.close()
-
 # Make the triangle plot.
+# samples = sampler.chain
+# lnprobs = sampler.lnprobability
+# print lnprobs[1, 1]
+# print sampler.get_lnprob(samples[1, 1])
+# err
+
 samples = sampler.chain.reshape((-1, ndim))
+lnprobs = sampler.lnprobability.reshape(-1)
+print np.max(lnprobs)
+print samples[np.argmax(lnprobs)]
+print chi2(samples[np.argmax(lnprobs)])
+print sampler.get_lnprob(samples[np.argmax(lnprobs)]) * (-2)
 
 # import corner
 # fig = corner.corner(samples[:, :5])
 # fig.savefig("triangle.png")
 
-for ind, s in enumerate(samples):
-    if ind == 0:
-        r2 = chi2(s)
-        x = s
-    else:
-        tmp = chi2(s)
-        if tmp < r2:
-            r2 = tmp
-            x = s
-print r2
-print x
+# for ind, s in enumerate(samples):
+#     if ind == 0:
+#         r2 = chi2(s)
+#         x = s
+#     else:
+#         tmp = chi2(s)
+#         if tmp < r2:
+#             r2 = tmp
+#             x = s
+# print r2
+# print x
+# print sampler.get_lnprob(x) * (-2)
 
-# Compute the quantiles.
-samples[:, 2] = np.exp(samples[:, 2])
-x_mcmc = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]),
-                             zip(*np.percentile(samples, [16, 50, 84],
-                                                axis=0)))
-print x_mcmc
+# # Compute the quantiles.
+# samples[:, 2] = np.exp(samples[:, 2])
+# x_mcmc = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]),
+#                              zip(*np.percentile(samples, [16, 50, 84],
+#                                                 axis=0)))
+# print x_mcmc
+
+
+# Close the processes.
+pool.close()
