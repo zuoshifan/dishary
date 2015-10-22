@@ -6,6 +6,7 @@
 #     import pickle
 # import pickle
 import sys
+import Queue as Q  # ver. < 3.0
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
@@ -169,8 +170,17 @@ else:
 # print 'x1:', x1
 # print 'bnds:', bnds
 
+class Rx(object):
+    def __init__(self, r, x):
+        self.r = r # as the priority, smaller r for higher priority
+        self.x = x
+    def __cmp__(self, other):
+        return cmp(other.r, self.r)
+
+q = Q.PriorityQueue(maxsize=5)
 
 def chi2(x):
+    global q
     tmp_Phi = np.zeros_like(Phi)
     for n in range(num_nf):
         for ind, (i, j) in enumerate(bls):
@@ -203,7 +213,13 @@ def chi2(x):
             for p in range(npol):
                 tmp_Phi[n, p, ind] = k0 * (ri - rj) + phii[p] - phij[p]
     tmp_Phi = np.mod(tmp_Phi, 2*np.pi)
-    return np.sum((Phi - tmp_Phi)**2)
+    r = np.sum((Phi - tmp_Phi)**2)
+    try:
+        q.put(Rx(r, x), block=False)
+    except Q.Full:
+        q.get()
+        q.put(Rx(r, x), block=False)
+    return r
 
 # bounds of the values
 # bnds = []
@@ -252,12 +268,20 @@ print("Running MCMC...")
 # Run 100 steps as a burn-in.
 burnin = 1
 # pos, prob, state = sampler.run_mcmc(pos, burnin, rstate0=np.random.get_state())
+print q.empty()
 pos, prob, state = sampler.run_mcmc(pos, burnin)
+print q.empty()
 # Reset the chain to remove the burn-in samples.
 sampler.reset()
 # Starting from the final position in the burn-in chain, sample for 1000 steps.
+print q.empty()
 sampler.run_mcmc(pos, 10, rstate0=state)
+print q.empty()
 print("Done.")
+
+while not q.empty():
+    rx = q.get()
+    print rx.r, rx.x
 
 # Close the processes.
 pool.close()
@@ -269,17 +293,17 @@ samples = sampler.chain.reshape((-1, ndim))
 # fig = corner.corner(samples[:, :5])
 # fig.savefig("triangle.png")
 
-for ind, s in enumerate(samples):
-    if ind == 0:
-        r2 = chi2(s)
-        x = s
-    else:
-        tmp = chi2(s)
-        if tmp < r2:
-            r2 = tmp
-            x = s
-print r2
-print x
+# for ind, s in enumerate(samples):
+#     if ind == 0:
+#         r2 = chi2(s)
+#         x = s
+#     else:
+#         tmp = chi2(s)
+#         if tmp < r2:
+#             r2 = tmp
+#             x = s
+# print r2
+# print x
 
 # Compute the quantiles.
 samples[:, 2] = np.exp(samples[:, 2])
