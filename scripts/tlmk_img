@@ -35,6 +35,12 @@ o.add_option('--cnt', dest='cnt', type='int', default=0,
     help='Start counting output images from this number.  Default 0.')
 o.add_option('--fmt', dest='fmt', default='im%04d',
     help='A format string for counting successive images written to files.  Default is im%04d (i.e. im0001).')
+o.add_option('--az', dest='az', type=float, default=0,
+    help='Azimuthal angle of the antenna pointing.  Default is 0 degree.')
+o.add_option('--alt', dest='alt', type=float, default=90,
+    help='Altitude of the antenna pointing.  Default is 90 degree.')
+o.add_option('--twist', dest='twist', type=float, default=0,
+    help='Twisting of the antenna polarization.  Default is 0 degree.')
 # o.add_option('--skip_phs', dest='skip_phs', action='store_true',
 #     help='Do not phase visibilities before gridding.')
 # o.add_option('--zen_phased', dest='zen_phased', action='store_true',
@@ -75,6 +81,9 @@ chans = a.scripting.parse_chans(opts.chan, uv['nchan'])
 nchan = chans.size
 a.scripting.uv_selector(uv, opts.ant, opts.pol)
 aa = a.cal.get_aa(opts.cal, uv['sdf'], uv['sfreq'], uv['nchan'])
+# set antenna pointing
+for ai in aa:
+    ai.set_pointing(az=n.radians(opts.az), alt=n.radians(opts.alt), twist=n.radians(opts.twist))
 aa.select_chans(chans)
 aa.set_active_pol(opts.pol)
 afreqs = aa[0].beam.afreqs
@@ -262,8 +271,8 @@ for srccnt, s in enumerate(cat.values()):
                                         uvs = n.abs(im[i].uv)
                                         bms,dim,dbm = uvs,uvs,uvs
                                     # save uvws to file
-                                    ntime = len(uvws[i])
                                     to_hdf5('uvw', n.array(uvws[i]), s, imgcnt, [i, chans[i]], history=history)
+                                    uvws[i] = []
                                     for k in ['uvs','bms','dim','dbm']:
                                         if k in outputs: to_fits(k, eval(k), s, imgcnt, [i, chans[i]], history=history)
                                     us[i],vs[i],ws[i],ds[i],wgts[i] = [],[],[],[],[]
@@ -275,8 +284,8 @@ for srccnt, s in enumerate(cat.values()):
                                     uvs = n.abs(im.uv)
                                     bms,dim,dbm = uvs,uvs,uvs
                                 # save uvws to file
-                                ntime = len(uvws[i])
                                 to_hdf5('uvw', n.array(uvws).reshape(-1, 3), s, imgcnt, None, history=history)
+                                uvws=[]
                                 for k in ['uvs','bms','dim','dbm']:
                                     if k in outputs: to_fits(k, eval(k), s, imgcnt, None, history=history)
                                 us,vs,ws,ds,wgts = [],[],[],[],[]
@@ -349,7 +358,8 @@ for srccnt, s in enumerate(cat.values()):
                 us.append(u)
                 vs.append(v)
                 ws.append(w)
-                uvws.append(n.vstack(u, v, w).T)
+                uvw = [[u[i], v[i], w[i]] for i in range(len(u))]
+                uvws += uvw
                 wgts.append(wgt.compress(valid))
                 # If data buffer is full, grid data
                 if len(ds) * len(chans) > opts.buf_thresh:
@@ -366,8 +376,8 @@ for srccnt, s in enumerate(cat.values()):
                 print 'No data: skipping output file.'
                 continue
             # save uvws to file
-            ntime = len(uvws[i])
             to_hdf5('uvw', n.array(uvws[i]), s, imgcnt, [i, chans[i]], history=history)
+            uvws[i] = []
             for k in ['uvs','bms','dim','dbm']:
                 if k in outputs: to_fits(k, eval(k), s, imgcnt, [i, chans[i]], history=history)
             us[i],vs[i],ws[i],ds[i],wgts[i] = [],[],[],[],[]
@@ -385,8 +395,8 @@ for srccnt, s in enumerate(cat.values()):
             print 'No data: skipping output file.'
             continue
         # save uvws to file
-        ntime = len(uvws)
-        to_hdf5('uvw', n.array(uvws).reshape(-1, 3), s, imgcnt, None, history=history)
+        to_hdf5('uvw', n.array(uvws), s, imgcnt, None, history=history)
+        uvws = []
         for k in ['uvs','bms','dim','dbm']:
             if k in outputs: to_fits(k, eval(k), s, imgcnt, None, history=history)
         us,vs,ws,ds,wgts = [],[],[],[],[]
