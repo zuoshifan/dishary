@@ -41,7 +41,7 @@ freq = 750.0 # MHz
 k0 = 2 * np.pi * (1.0e6 * freq) / (0.01 * a.const.c)
 
 fix_nf = True # fix the position of near-field sources
-num_nf = 3 # number of near-field sources
+num_nf = 2 # number of near-field sources
 
 ndish = 16
 # the reference dish

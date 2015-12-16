@@ -107,7 +107,9 @@ for cnt, filename in enumerate(args):
         dx2 = (xpx/2 - .5) * kwds['d_ra'] * a.img.deg2rad
         dy1 = -(ypx/2 + .5) * kwds['d_dec'] * a.img.deg2rad
         dy2 = (ypx/2 - .5) * kwds['d_dec'] * a.img.deg2rad
-        map = Basemap(projection='ortho', lon_0=180, lat_0=kwds['dec'],
+        # map = Basemap(projection='ortho', lon_0=180, lat_0=kwds['dec'],
+        #     rsphere=1, llcrnrx=dx1, llcrnry=dy1, urcrnrx=dx2,urcrnry=dy2)
+        map = Basemap(projection='ortho', lon_0=kwds['ra'], lat_0=kwds['dec'],
             rsphere=1, llcrnrx=dx1, llcrnry=dy1, urcrnrx=dx2,urcrnry=dy2)
         # map.drawmeridians(n.arange(kwds['ra']-180,kwds['ra']+180,30))
         # map.drawparallels(n.arange(-90,120,30))

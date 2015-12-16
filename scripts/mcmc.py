@@ -37,7 +37,7 @@ freq = 750.0 # MHz
 k0 = 2 * np.pi * (1.0e6 * freq) / (0.01 * a.const.c)
 
 # options
-add_noise = True # add some noise to the simulated phase
+add_noise = False # add some noise to the simulated phase
 sigma = 0.1 # sigma of the noise
 fix_nf = False # fix the position of near-field sources
 num_nf = 2 # number of near-field sources
@@ -233,8 +233,8 @@ if not pool.is_master():
     sys.exit(0)
 
 # Set up the sampler.
-ndim, nwalkers = len(x0), 1000
-# ndim, nwalkers = len(x0), 150
+# ndim, nwalkers = len(x0), 1000
+ndim, nwalkers = len(x0), 200
 pos = [x0 + bnds*rand0(ndim) for i in range(nwalkers)]
 # Initialize the sampler with the chosen specs.
 sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, pool=pool)
@@ -245,7 +245,7 @@ print("Running MCMC...")
 # Run 100 steps as a burn-in.
 # burnin = 1
 # pos, prob, state = sampler.run_mcmc(pos, burnin, rstate0=np.random.get_state())
-pos, prob, state = sampler.run_mcmc(pos, 10000, rstate0=np.random.get_state())
+pos, prob, state = sampler.run_mcmc(pos, 100, rstate0=np.random.get_state())
 # Reset the chain to remove the burn-in samples.
 # sampler.reset()
 # Starting from the final position in the burn-in chain, sample for 1000 steps.

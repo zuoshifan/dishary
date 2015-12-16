@@ -271,7 +271,7 @@ for uvfile in args:
 
             # complex gain
             d = d.take(chans)
-            Gij = d / Vij
+            Gij = d / (np.exp(-1.0J * 2 * np.pi * w) * Vij)
 
             G[pol][(i, j)].append(Gij)
             B[pol][(i, j)].append(bmij)
