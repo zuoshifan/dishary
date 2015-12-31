@@ -7,7 +7,7 @@ import aipy as a
 import numpy as np
 from scipy.optimize import curve_fit
 from scipy.interpolate import UnivariateSpline
-from scipy.linalg import eigh
+from scipy.linalg import eigh, inv
 import h5py
 import matplotlib
 matplotlib.use('Agg')
@@ -185,6 +185,7 @@ with h5py.File(output_dir + 'data_int_time.hdf5', 'w') as f:
 
 
 #######################################################
+data_cal = np.zeros_like(data_phs2zen) # save data after cal
 # construct visiblity matrix
 Vmat = np.zeros((2*nants, 2*nants), dtype=data.dtype)
 for fi in range(nfreq):
@@ -204,10 +205,62 @@ for fi in range(nfreq):
                 Vmat[2*i+1, 2*j] = data_int_time[ind, 3, fi].conj() # yx
     # Eigen decomposition
     s, U = eigh(Vmat)
-    print 'Eig val:', s
-    # G = U * np.sqrt(s)
+    # print 'Eig val:', s
+    # plot eig val
+    plt.figure()
+    plt.plot(s[::-1], 'o') # in descending order
+    plt.ylabel('Eigen value')
+    plt.savefig(output_dir + 'eig_val_%d.png' % fi)
+    plt.close()
+    # the gain matrix for this freq
+    Gmat = U[:, -2:] * np.sqrt(s[-2:]) # only the 2 maximum eigen-vals
+    # calibrate for this freq
+    # construct nt x 2 x 2 visibility for this freq
+    Vij = np.zeros((nt, 2, 2), dtype=data_phs2zen.dtype)
+    for i, ai in enumerate(ants):
+        for j, aj in enumerate(ants):
+            try:
+                ind = bls.index((ai, aj))
+                Vij[:, 0, 0] = data_phs2zen[:, ind, 0, fi] # xx
+                Vij[:, 1, 1] = data_phs2zen[:, ind, 1, fi] # yy
+                Vij[:, 0, 1] = data_phs2zen[:, ind, 2, fi] # xy
+                Vij[:, 1, 0] = data_phs2zen[:, ind, 3, fi] # yx
+            except ValueError:
+                ind = bls.index((aj, ai))
+                Vij[:, 0, 0] = data_phs2zen[:, ind, 0, fi].conj() # xx
+                Vij[:, 1, 1] = data_phs2zen[:, ind, 1, fi].conj() # yy
+                Vij[:, 0, 1] = data_phs2zen[:, ind, 2, fi].conj() # xy
+                Vij[:, 1, 0] = data_phs2zen[:, ind, 3, fi].conj() # yx
+            # 2x2 gain for this freq
+            Gi = Gmat[2*i:2*(i+1)]
+            Gj = Gmat[2*j:2*(j+1)]
+            Giinv = inv(Gi)
+            GjHinv = inv(Gj.T.conj())
+            # nt x 2 x 2 visibility after calibrate
+            VijGj = np.dot(Vij, GjHinv)
+            Vij_cal = np.dot(Giinv[np.newaxis, :, :], VijGj)[0].swapaxes(0, 1)
 
-err
+            data_cal[:, ind, 0, fi] = Vij_cal[:, 0, 0] # xx
+            data_cal[:, ind, 1, fi] = Vij_cal[:, 1, 1] # yy
+            data_cal[:, ind, 2, fi] = Vij_cal[:, 0, 1] # xy
+            data_cal[:, ind, 3, fi] = Vij_cal[:, 1, 0] # yx
+
+# save data after cal
+with h5py.File(output_dir + 'data_cal.hdf5', 'w') as f:
+    f.create_dataset('data_cal', data=data_cal)
+
+# convert to Stokes I, Q, U, V
+data_cal_stokes = np.zeros_like(data_cal)
+data_cal_stokes[:, :, 0, :] = 0.5 * (data_cal[:, :, 0] + data_cal[:, :, 1]) # I
+data_cal_stokes[:, :, 1, :] = 0.5 * (data_cal[:, :, 0] - data_cal[:, :, 1]) # Q
+data_cal_stokes[:, :, 2, :] = 0.5 * (data_cal[:, :, 2] + data_cal[:, :, 3]) # U
+data_cal_stokes[:, :, 3, :] = -0.5J * (data_cal[:, :, 2] - data_cal[:, :, 3]) # V
+
+# save stokes data
+with h5py.File(output_dir + 'data_cal_stokes.hdf5', 'w') as f:
+    f.create_dataset('data_cal_stokes', data=data_cal_stokes)
+
+
 
 #######################################################
 # create the uv and uv-coverage matrix
@@ -244,7 +297,7 @@ for ti, t in enumerate(ts):
             continue
         us, vs, ws = aa.gen_uvw(i-1, j-1, src=s) # NOTE start from 0
         for fi, (u, v) in enumerate(zip(us.flat, vs.flat)):
-            val = data[ti, bl_ind, pol_ind, fi]
+            val = data_cal_stokes[ti, bl_ind, 0, fi] # only I here
             if np.isfinite(val):
                 up = np.int(u / res)
                 vp = np.int(v / res)
@@ -257,53 +310,57 @@ uv_cov_fft = np.fft.ifft2(np.fft.ifftshift(uv_cov))
 uv_cov_fft = np.fft.ifftshift(uv_cov_fft)
 uv_fft = np.fft.ifft2(np.fft.ifftshift(uv))
 uv_fft = np.fft.ifftshift(uv_fft)
+uv_imag_fft = np.fft.ifft2(np.fft.ifftshift(1.0J * uv.imag))
+uv_imag_fft = np.fft.ifftshift(uv_imag_fft)
+
 
 # save data
 
-with h5py.File('uv_img_late.hdf5', 'w') as f:
+with h5py.File(output_dir + 'uv_imag.hdf5', 'w') as f:
     f.create_dataset('uv_cov', data=uv_cov)
     f.create_dataset('uv', data=uv)
     f.create_dataset('uv_cov_fft', data=uv_cov_fft)
     f.create_dataset('uv_fft', data=uv_fft)
+    f.create_dataset('uv_imag_fft', data=uv_imag_fft)
     f.attrs['max_wl'] = max_wl
     f.attrs['max_lm'] = max_lm
 
 
-plt.figure(figsize=(13, 8))
-plt.subplot(231)
-extent = [-max_wl, max_wl, -max_wl, max_wl]
-plt.imshow(uv_cov, origin='lower', aspect='auto', extent=extent, interpolation='nearest')
-plt.xlabel(r'$u$ / $\lambda$')
-plt.ylabel(r'$v$ / $\lambda$')
-plt.colorbar()
-plt.subplot(232)
-plt.imshow(uv.real, origin='lower', aspect='auto', extent=extent, interpolation='nearest')
-plt.xlabel(r'$u$ / $\lambda$')
-plt.ylabel(r'$v$ / $\lambda$')
-plt.colorbar()
-plt.subplot(233)
-plt.imshow(uv.imag, origin='lower', aspect='auto', extent=extent, interpolation='nearest')
-plt.xlabel(r'$u$ / $\lambda$')
-plt.ylabel(r'$v$ / $\lambda$')
-plt.colorbar()
+# plt.figure(figsize=(13, 8))
+# plt.subplot(231)
+# extent = [-max_wl, max_wl, -max_wl, max_wl]
+# plt.imshow(uv_cov, origin='lower', aspect='auto', extent=extent, interpolation='nearest')
+# plt.xlabel(r'$u$ / $\lambda$')
+# plt.ylabel(r'$v$ / $\lambda$')
+# plt.colorbar()
+# plt.subplot(232)
+# plt.imshow(uv.real, origin='lower', aspect='auto', extent=extent, interpolation='nearest')
+# plt.xlabel(r'$u$ / $\lambda$')
+# plt.ylabel(r'$v$ / $\lambda$')
+# plt.colorbar()
+# plt.subplot(233)
+# plt.imshow(uv.imag, origin='lower', aspect='auto', extent=extent, interpolation='nearest')
+# plt.xlabel(r'$u$ / $\lambda$')
+# plt.ylabel(r'$v$ / $\lambda$')
+# plt.colorbar()
 
-plt.subplot(234)
-extent = [-max_lm, max_lm, -max_lm, max_lm]
-plt.imshow(uv_cov_fft.real, origin='lower', aspect='auto', extent=extent, interpolation='nearest')
-plt.xlabel(r'$l$')
-plt.ylabel(r'$m$')
-plt.colorbar()
-plt.subplot(235)
-plt.imshow(uv_fft.real, origin='lower', aspect='auto', extent=extent, interpolation='nearest')
-plt.xlabel(r'$l$')
-plt.ylabel(r'$m$')
-plt.colorbar()
-plt.subplot(236)
-plt.imshow(uv_fft.imag, origin='lower', aspect='auto', extent=extent, interpolation='nearest')
-plt.xlabel(r'$l$')
-plt.ylabel(r'$m$')
-plt.colorbar()
+# plt.subplot(234)
+# extent = [-max_lm, max_lm, -max_lm, max_lm]
+# plt.imshow(uv_cov_fft.real, origin='lower', aspect='auto', extent=extent, interpolation='nearest')
+# plt.xlabel(r'$l$')
+# plt.ylabel(r'$m$')
+# plt.colorbar()
+# plt.subplot(235)
+# plt.imshow(uv_fft.real, origin='lower', aspect='auto', extent=extent, interpolation='nearest')
+# plt.xlabel(r'$l$')
+# plt.ylabel(r'$m$')
+# plt.colorbar()
+# plt.subplot(236)
+# plt.imshow(uv_fft.imag, origin='lower', aspect='auto', extent=extent, interpolation='nearest')
+# plt.xlabel(r'$l$')
+# plt.ylabel(r'$m$')
+# plt.colorbar()
 
 
 
-plt.savefig('uv_xx_all_late.png')
+# plt.savefig('uv_xx_all_late.png')
