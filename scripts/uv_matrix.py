@@ -27,6 +27,7 @@ data_file = data_dir + '20150922011000_20150922012800.npy'
 freq_file = data_dir + '20150922011000_20150922012800_freq.npy'
 time_file = data_dir + '20150922011000_20150922012800_time.npy'
 ants_file = data_dir + '20150922011000_20150922012800_ants.npy'
+az, alt = 358.06, 75.28 # pointing, degree
 
 output_dir = data_dir + 'output/'
 if not os.path.exists(output_dir):
@@ -266,11 +267,11 @@ with h5py.File(output_dir + 'data_cal_stokes.hdf5', 'w') as f:
 # create the uv and uv-coverage matrix
 res = 1 # resolution, unit: wavelength
 max_wl = 200 # max wavelength
-max_lm = 1.0 / res
+max_lm = 0.5 * 1.0 / res
 size = (2 * max_wl / res) + 1
 center = max_wl / res # the central pixel
 uv = np.zeros((size, size), dtype=np.complex128)
-uv_cov = np.zeros((size, size), dtype=np.float64)
+uv_cov = np.zeros((size, size), dtype=np.complex128)
 
 
 src = 'cas'
@@ -286,11 +287,66 @@ print 'strength', s._jys,
 print 'measured at', s.mfreq, 'GHz',
 print 'with index', s.index
 
+
+def get_uvvec(s0_top, n_top):
+    """Compute unit vector in u,v direction in topocentric coordinate.
+    s0_top: unit vector of the phase center in topocentric coordinate;
+    n_top: unit vector of the north celestial pole in topocentric coordinate.
+
+    Return unit vector in u and v direction.
+    """
+    s0 = s0_top
+    n = n_top
+    s0x, s0y, s0z = s0[0], s0[1], s0[2]
+    nx, ny, nz = n[0], n[1], n[2]
+    # uvec is perpendicular to both s0 and n, and have ux >= 0 to point to East
+    ux = 1.0 / np.sqrt(1.0 + ((nz*s0x - nx*s0z) / (ny*s0z - nz*s0y))**2 + ((ny*s0x - nx*s0y) / (nz*s0y - ny*s0z))**2)
+    uy = ux * ((nz*s0x - nx*s0z) / (ny*s0z - nz*s0y))
+    uz = ux * ((ny*s0x - nx*s0y) / (nz*s0y - ny*s0z))
+    uvec = np.array([ux, uy, uz])
+    # vvec is in the plane spanned by s0 and n, and have dot(n, vvec) > 0
+    ns0 = np.dot(n, s0)
+    l1 = 1.0 / np.sqrt(1.0 - ns0**2)
+    l2 = - l1 * ns0
+    vvec = l1*n + l2*s0
+
+    return uvec, vvec
+
+
+def conv_kernal(u, v, sigma, l0=0, m0=0):
+    return np.exp(-2.0J * np.pi * (u * l0 + v * m0)) * np.exp(-0.5 * (2 * np.pi * sigma)**2 * (u**2 + v**2))
+
+def conv_gauss(arr, rc, cc, sigma, val=1.0, l0=0, m0=0, pix=1, npix=4):
+    for r in range(-npix, npix):
+        for c in range(-npix, npix):
+            arr[rc+r, cc+c] += conv_kernal(r*pix, c*pix, sigma, l0, m0)
+
+
+sigma = 0.07 # makes A(l, m) = np.exp(-(l**2 + m**2) / (2 * sigma**2)) approx 4 degree
+# pointting vector in topocentric coord
+pt_top = a.coord.azalt2top((np.radians(az), np.radians(alt)))
+
 # array
 aa = a.cal.get_aa(cal, 1.0e-3 * freq) # use GHz
 for ti, t in enumerate(ts):
     aa.set_jultime(t)
     s.compute(aa)
+    # get the topocentric coordinate of the calibrator at the current time
+    s_top = s.get_crds('top', ncrd=3)
+    # the north celestial pole
+    NP = a.phs.RadioFixedBody(0.0, np.pi/2.0, name='north pole', epoch=str(aa.epoch))
+
+    # get the topocentric coordinate of the north celestial pole at the current time
+    NP.compute(aa)
+    n_top = NP.get_crds('top', ncrd=3)
+
+    # unit vector in u,v direction in topocentric coordinate at current time relative to the calibrator
+    uvec, vvec = get_uvvec(stop, n_top)
+
+    # l,m of the pointing relative to phase center (the calibrator)
+    l0 = np.dot(pt_top, uvec)
+    m0 = np.dot(pt_top, vvec)
+
     for bl_ind in range(len(bls)):
         i, j = bls[bl_ind]
         if i == j:
@@ -301,10 +357,15 @@ for ti, t in enumerate(ts):
             if np.isfinite(val):
                 up = np.int(u / res)
                 vp = np.int(v / res)
-                uv_cov[center+vp, center+up] += 1.0
-                uv_cov[center-vp, center-up] += 1.0 # append conjugate
-                uv[center+vp, center+up] += val
-                uv[center-vp, center-up] += np.conj(val)# append conjugate
+                # uv_cov[center+vp, center+up] += 1.0
+                # uv_cov[center-vp, center-up] += 1.0 # append conjugate
+                # uv[center+vp, center+up] += val
+                # uv[center-vp, center-up] += np.conj(val)# append conjugate
+                conv_gauss(uv_cov, center+vp, center+up, sigma, 1.0, l0, m0, res)
+                conv_gauss(uv_cov, center-vp, center-up, sigma, 1.0, l0, m0, res) # append conjugate
+                conv_gauss(uv, center+vp, center+up, sigma, val, l0, m0, res)
+                conv_gauss(uv, center-vp, center-up, sigma, np.conj(val), l0, m0, res) # append conjugate
+
 
 uv_cov_fft = np.fft.ifft2(np.fft.ifftshift(uv_cov))
 uv_cov_fft = np.fft.ifftshift(uv_cov_fft)
