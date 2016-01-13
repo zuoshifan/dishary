@@ -319,7 +319,7 @@ def conv_kernal(u, v, sigma, l0=0, m0=0):
 def conv_gauss(arr, rc, cc, sigma, val=1.0, l0=0, m0=0, pix=1, npix=4):
     for r in range(-npix, npix):
         for c in range(-npix, npix):
-            arr[rc+r, cc+c] += conv_kernal(r*pix, c*pix, sigma, l0, m0)
+            arr[rc+r, cc+c] += val * conv_kernal(r*pix, c*pix, sigma, l0, m0)
 
 
 sigma = 0.07 # makes A(l, m) = np.exp(-(l**2 + m**2) / (2 * sigma**2)) approx 4 degree
@@ -341,7 +341,7 @@ for ti, t in enumerate(ts):
     n_top = NP.get_crds('top', ncrd=3)
 
     # unit vector in u,v direction in topocentric coordinate at current time relative to the calibrator
-    uvec, vvec = get_uvvec(stop, n_top)
+    uvec, vvec = get_uvvec(s_top, n_top)
 
     # l,m of the pointing relative to phase center (the calibrator)
     l0 = np.dot(pt_top, uvec)
